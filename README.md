@@ -129,8 +129,31 @@ npm run dev     # เปิด http://localhost:5173
 publish `dist` ส่วน SSR handler ออกที่ `.netlify/functions-internal/server` ซึ่ง Netlify
 หยิบไปเองอัตโนมัติ (`path: "/*"`, `preferStatic: true`)
 
-ใส่ env vars ทุกตัวใน Site configuration → Environment variables แล้ว **trigger build ใหม่**
-(ไม่ใช่ redeploy) เพราะ `VITE_*` ฝังตอน build
+**ใส่ env vars ทุกตัวที่อยู่ใน `.env` ลงใน Site configuration → Environment variables**
+รวม `FIREBASE_SA_TANTUN` และเพื่อน ๆ ด้วย — ถ้าตัวไหนเว้นว่างไว้ใน `.env` ก็ไม่ต้องใส่
+
+ทั้งสองกลุ่มนี้ทำงานคนละจังหวะกัน:
+
+| กลุ่ม            | อ่านเมื่อไหร่                                    | ผลเมื่อแก้ค่า                                              |
+| ---------------- | ------------------------------------------------ | ---------------------------------------------------------- |
+| `VITE_*` (6 ตัว) | ตอน **build** — Vite ฝังลงไฟล์ JS ของเบราว์เซอร์ | ต้อง build ใหม่จริง ๆ · publish deploy เก่าซ้ำจะได้ค่าเดิม |
+| ที่เหลือทั้งหมด  | ตอน **runtime** ใน Netlify Function              | Netlify ผูกค่าไว้ตอน deploy — ต้อง deploy ใหม่เหมือนกัน    |
+
+ดังนั้นแก้ค่าอะไรก็ตาม ให้ **Deploys → Trigger deploy → Clear cache and deploy site**
+
+#### ตั้งค่าความปลอดภัยของ env vars
+
+ตอนเพิ่มตัวแปร Netlify จะถามว่า _"Contains secret values"_ หรือไม่ — ติ๊กให้ถูกกลุ่ม
+เพราะ**ติ๊กแล้วถอนคืนไม่ได้**:
+
+- **ติ๊ก** — `FIREBASE_SERVICE_ACCOUNT`, `FIREBASE_SA_*`, `LINE_CHANNEL_SECRET`
+- **ไม่ติ๊ก** — `VITE_FIREBASE_*` ทั้ง 6 ตัว เพราะมันถูกฝังลง bundle ของเบราว์เซอร์อยู่แล้ว
+  โดยตั้งใจ (ความปลอดภัยมาจาก security rules ไม่ใช่การซ่อนค่า) ถ้าติ๊กว่าเป็น secret
+  Netlify จะเจอค่าเหล่านี้ใน `dist/` แล้ว **build fail**
+
+`netlify.toml` ใส่ `SECRETS_SCAN_OMIT_KEYS` ของ `VITE_FIREBASE_*` ทั้ง 6 ตัวไว้ให้แล้ว
+เผื่อ smart detection จับผิด — ส่วน service account และ LINE secret ยังถูกสแกนตามปกติ
+ถ้า build fail เพราะเจอค่าพวกนั้นใน output แปลว่ามีอะไรรั่วจริง อย่าปิดการสแกน ให้ไล่หาสาเหตุ
 
 ### 7. LINE Developers
 
