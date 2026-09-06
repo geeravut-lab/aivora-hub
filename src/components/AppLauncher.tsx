@@ -65,6 +65,9 @@ export function AppLauncher({
     queryKey: ["apps", category, user?.uid],
     enabled: Boolean(user),
     queryFn: () => listVisibleApps(user!.uid, category),
+    // A permission or config error is permanent — retrying three times only
+    // holds the skeleton on screen and hides the reason.
+    retry: 1,
   });
 
   const profileQuery = useQuery({
@@ -204,6 +207,23 @@ export function AppLauncher({
             {[0, 1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-28 rounded-3xl" />
             ))}
+          </div>
+        ) : appsQuery.isError ? (
+          // Say what actually broke. Silently falling back to "no apps here"
+          // makes a rules or config failure look like an empty launcher.
+          <div className="mt-5 rounded-3xl border border-destructive/40 bg-destructive/5 p-6">
+            <p className="text-sm font-medium">โหลดรายการแอปไม่สำเร็จ</p>
+            <p className="mt-2 break-words text-xs text-muted-foreground">
+              {appsQuery.error instanceof Error ? appsQuery.error.message : "ไม่ทราบสาเหตุ"}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 rounded-full"
+              onClick={() => void appsQuery.refetch()}
+            >
+              ลองอีกครั้ง
+            </Button>
           </div>
         ) : (appsQuery.data ?? []).length === 0 ? (
           <p className="mt-5 rounded-3xl border border-border bg-card/70 p-6 text-sm text-muted-foreground">

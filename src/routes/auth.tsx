@@ -95,17 +95,26 @@ function AuthPage() {
   useEffect(() => {
     if (!user) return;
     let cancelled = false;
+
     (async () => {
       try {
         // The admin claim is granted server-side from ADMIN_EMAILS; refresh the
         // token so the new claim is present before the launcher renders.
-        const { changed } = await syncClaim();
+        // Never let this hold the user on the login screen — a slow or failing
+        // sync only costs the admin badge until the next sign-in.
+        const { changed } = await Promise.race([
+          syncClaim(),
+          new Promise<{ changed: boolean }>((_, reject) =>
+            setTimeout(() => reject(new Error("sync timed out")), 5000),
+          ),
+        ]);
         if (changed) await auth.currentUser?.getIdToken(true);
       } catch (error) {
         console.error(error);
       }
       if (!cancelled) window.location.replace(destination);
     })();
+
     return () => {
       cancelled = true;
     };

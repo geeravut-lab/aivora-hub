@@ -14,3 +14,14 @@
   # Only these six are omitted — FIREBASE_SERVICE_ACCOUNT, FIREBASE_SA_* and the
   # LINE secrets stay scanned, and must never appear in build output.
   SECRETS_SCAN_OMIT_KEYS = "VITE_FIREBASE_API_KEY,VITE_FIREBASE_AUTH_DOMAIN,VITE_FIREBASE_PROJECT_ID,VITE_FIREBASE_STORAGE_BUCKET,VITE_FIREBASE_MESSAGING_SENDER_ID,VITE_FIREBASE_APP_ID"
+
+# Firebase's signInWithPopup opens the Google account chooser and then closes it
+# from the opener. Under Chrome's default cross-origin-opener-policy that
+# window.close is blocked — the console shows "Cross-Origin-Opener-Policy policy
+# would block the window.close call" and the popup lingers. This value keeps the
+# opener relationship for popups this page opened, which is what the handshake
+# needs, while still isolating the page from unrelated browsing-context groups.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    Cross-Origin-Opener-Policy = "same-origin-allow-popups"

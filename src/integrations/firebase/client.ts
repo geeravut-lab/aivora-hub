@@ -33,28 +33,28 @@ function readConfig() {
   return config as Required<typeof config>;
 }
 
-let _app: FirebaseApp | undefined;
-
-export function firebaseApp(): FirebaseApp {
-  if (_app) return _app;
-  _app = getApps().length > 0 ? getApp() : initializeApp(readConfig());
-  return _app;
+function createApp(): FirebaseApp {
+  return getApps().length > 0 ? getApp() : initializeApp(readConfig());
 }
 
 /**
- * Lazy proxies so importing this module never touches the config. Route files
- * are evaluated during SSR too, where VITE_* may legitimately be absent.
+ * These MUST be the real SDK objects, not lazy proxies.
+ *
+ * A Proxy that forwards property access still fails `instanceof`, because the
+ * prototype comes from the proxy target. `collection()`, `doc()` and `ref()`
+ * all cast their first argument with an instanceof check, so a proxied
+ * Firestore throws "Expected first argument to collection() to be a
+ * CollectionReference, a DocumentReference or FirebaseFirestore" on every
+ * single read. Auth happens to tolerate it, which makes the failure look like
+ * "login works but no data loads".
+ *
+ * The whole module is client-only: every route that touches Firebase is
+ * `ssr: false`, but the module is still evaluated during SSR, so on the server
+ * these stay undefined instead of throwing over a missing config.
  */
-function lazy<T extends object>(factory: () => T): T {
-  let instance: T | undefined;
-  return new Proxy({} as T, {
-    get(_target, prop, receiver) {
-      if (!instance) instance = factory();
-      return Reflect.get(instance, prop, receiver);
-    },
-  });
-}
+const isBrowser = typeof window !== "undefined";
 
-export const auth: Auth = lazy(() => getAuth(firebaseApp()));
-export const db: Firestore = lazy(() => getFirestore(firebaseApp()));
-export const storage: FirebaseStorage = lazy(() => getStorage(firebaseApp()));
+export const firebaseApp = (isBrowser ? createApp() : undefined) as FirebaseApp;
+export const auth = (isBrowser ? getAuth(firebaseApp) : undefined) as Auth;
+export const db = (isBrowser ? getFirestore(firebaseApp) : undefined) as Firestore;
+export const storage = (isBrowser ? getStorage(firebaseApp) : undefined) as FirebaseStorage;
