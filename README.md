@@ -49,13 +49,13 @@ serverless function แล้ว build ผ่าน แต่พังตอน 
 
 ขั้นตอนด้านล่างทำคนละที่กัน:
 
-| ทำที่ไหน | ขั้นตอน |
-|---|---|
-| เว็บคอนโซล (เบราว์เซอร์) | 1 Firebase · 6 Netlify · 7 LINE Developers |
+| ทำที่ไหน                            | ขั้นตอน                                                    |
+| ----------------------------------- | ---------------------------------------------------------- |
+| เว็บคอนโซล (เบราว์เซอร์)            | 1 Firebase · 6 Netlify · 7 LINE Developers                 |
 | เครื่องคอมพิวเตอร์ของคุณ (terminal) | 2 ตั้ง `.env` · 3 deploy rules · 4 seed · 5 รัน dev server |
 
-ข้อ 3 และ 4 รันบนเครื่องคุณ แต่ไปแก้ Firebase บนคลาวด์ — ต้องมีไฟล์ service account JSON
-วางไว้ในโฟลเดอร์โปรเจกต์ก่อน (`.gitignore` กันไฟล์ชื่อ `serviceAccount*.json` ไว้แล้ว)
+ข้อ 3 และ 4 รันบนเครื่องคุณ แต่ไปแก้ Firebase บนคลาวด์ — ทำข้อ 2 (`.env`) ให้เสร็จก่อน
+เพราะสคริปต์อ่าน service account จาก `.env` เอง
 
 ### 1. Firebase
 
@@ -78,13 +78,13 @@ cp .env.example .env    # แล้วเติมค่า
 `VITE_*` ถูกฝังตอน **build** — เปลี่ยนแล้วต้อง build ใหม่ ไม่ใช่แค่ redeploy
 ส่วนที่เหลือเป็น secret ฝั่งเซิร์ฟเวอร์ **ห้ามใส่ prefix `VITE_`**
 
-| ตัวแปร | ใช้ทำอะไร |
-|---|---|
-| `VITE_FIREBASE_*` | config ฝั่งเบราว์เซอร์ (public โดยธรรมชาติ — ความปลอดภัยมาจาก security rules) |
-| `FIREBASE_SERVICE_ACCOUNT` | service account JSON ของ hub วางทั้งก้อนเป็นบรรทัดเดียว |
-| `ADMIN_EMAILS` | อีเมลที่จะได้ claim `admin` ตอนล็อกอิน (คั่นด้วย comma) |
-| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` / `LINE_LIFF_ID` | LINE Login channel + LIFF app |
-| `FIREBASE_SA_TANTUN` ฯลฯ | service account ของแอปลูกแต่ละตัว เว้นว่างได้ถ้ายังไม่ต่อ |
+| ตัวแปร                                                     | ใช้ทำอะไร                                                                                                      |
+| ---------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| `VITE_FIREBASE_*`                                          | config ฝั่งเบราว์เซอร์ (public โดยธรรมชาติ — ความปลอดภัยมาจาก security rules)                                  |
+| `FIREBASE_SERVICE_ACCOUNT`                                 | service account JSON **ของ Firebase project ตัว hub เอง** (ไฟล์ที่ดาวน์โหลดในข้อ 1) วางทั้งก้อนเป็นบรรทัดเดียว |
+| `ADMIN_EMAILS`                                             | อีเมลที่จะได้ claim `admin` ตอนล็อกอิน (คั่นด้วย comma)                                                        |
+| `LINE_CHANNEL_ID` / `LINE_CHANNEL_SECRET` / `LINE_LIFF_ID` | LINE Login channel + LIFF app                                                                                  |
+| `FIREBASE_SA_TANTUN` ฯลฯ                                   | service account ของแอปลูกแต่ละตัว เว้นว่างได้ถ้ายังไม่ต่อ                                                      |
 
 ### 3. Deploy security rules
 
@@ -97,7 +97,15 @@ npx firebase-tools deploy --only firestore:rules,storage --project <project-id>
 ### 4. ใส่ข้อมูลตั้งต้น
 
 ```bash
-FIREBASE_SERVICE_ACCOUNT="$(cat serviceAccount.json)" npm run seed
+npm install
+npm run seed
+```
+
+สคริปต์อ่าน `FIREBASE_SERVICE_ACCOUNT` จาก `.env` ที่ทำไว้ในข้อ 2 — **ไม่ต้องเอาไฟล์
+service account มาวางใน repo** ถ้าอยากชี้ไปที่ไฟล์แทนก็ได้:
+
+```bash
+GOOGLE_APPLICATION_CREDENTIALS=~/secrets/aivora-hub-sa.json npm run seed
 ```
 
 จะสร้างรายการแอป 6 ตัวและ branding เริ่มต้น (รันซ้ำได้ เป็น merge ทั้งหมด)
@@ -141,21 +149,21 @@ publish `dist` ส่วน SSR handler ออกที่ `.netlify/functions-i
 Role เก็บเป็น **Firebase custom claim** ไม่ใช่ collection
 
 - ล็อกอินด้วยอีเมลที่อยู่ใน `ADMIN_EMAILS` → ได้ claim อัตโนมัติ
-- หรือสั่งตรง: `FIREBASE_SERVICE_ACCOUNT="$(cat serviceAccount.json)" npm run set-admin -- you@example.com`
-  (เพิ่ม `--revoke` เพื่อถอน) — ผู้ใช้ต้องออกจากระบบแล้วเข้าใหม่ token ใบใหม่ถึงจะมี claim
+- หรือสั่งตรง: `npm run set-admin -- you@example.com` (เพิ่ม `--revoke` เพื่อถอน)
+  — ผู้ใช้ต้องออกจากระบบแล้วเข้าใหม่ token ใบใหม่ถึงจะมี claim
 
 ---
 
 ## โครงสร้าง Firestore
 
-| path | ใคร่เขียนได้ |
-|---|---|
-| `apps/{appId}` | อ่าน: ผู้ใช้ที่ล็อกอิน · เขียน: admin |
-| `branding/singleton` | อ่าน: ทุกคน (แสดงบนหน้า login) · เขียน: admin |
-| `profiles/{uid}` | อ่าน: เจ้าของ · เขียน: เซิร์ฟเวอร์เท่านั้น |
-| `userAppPrefs/{uid}/apps/{appId}` | อ่าน/เขียน: เจ้าของ |
-| `lineIndex/{lineUserId}` | เซิร์ฟเวอร์เท่านั้น (reverse lookup) |
-| `ssoTickets/{ticketHash}` | เซิร์ฟเวอร์เท่านั้น |
+| path                              | ใคร่เขียนได้                                  |
+| --------------------------------- | --------------------------------------------- |
+| `apps/{appId}`                    | อ่าน: ผู้ใช้ที่ล็อกอิน · เขียน: admin         |
+| `branding/singleton`              | อ่าน: ทุกคน (แสดงบนหน้า login) · เขียน: admin |
+| `profiles/{uid}`                  | อ่าน: เจ้าของ · เขียน: เซิร์ฟเวอร์เท่านั้น    |
+| `userAppPrefs/{uid}/apps/{appId}` | อ่าน/เขียน: เจ้าของ                           |
+| `lineIndex/{lineUserId}`          | เซิร์ฟเวอร์เท่านั้น (reverse lookup)          |
+| `ssoTickets/{ticketHash}`         | เซิร์ฟเวอร์เท่านั้น                           |
 
 ตั๋ว SSO ใช้ SHA-256 hash เป็น document id และ consume ด้วย conditional update
 (`currentDocument.updateTime`) — ยิงพร้อมกันสองครั้งจะสำเร็จได้ครั้งเดียวเท่านั้น
@@ -167,14 +175,14 @@ Role เก็บเป็น **Firebase custom claim** ไม่ใช่ colle
 
 ## สคริปต์
 
-| คำสั่ง | ทำอะไร |
-|---|---|
-| `npm run dev` | dev server |
-| `npm run build` | build สำหรับ Netlify |
-| `npm run typecheck` | `tsc --noEmit` |
-| `npm run lint` | eslint + prettier |
-| `npm run seed` | ใส่ข้อมูลแอป + branding ตั้งต้น |
-| `npm run set-admin -- <email>` | ให้/ถอนสิทธิ์ admin |
+| คำสั่ง                         | ทำอะไร                                        |
+| ------------------------------ | --------------------------------------------- |
+| `npm run dev`                  | dev server                                    |
+| `npm run build`                | build สำหรับ Netlify                          |
+| `npm run typecheck`            | `tsc --noEmit`                                |
+| `npm run lint`                 | eslint + prettier                             |
+| `npm run seed`                 | ใส่ข้อมูลแอป + branding ตั้งต้น (อ่าน `.env`) |
+| `npm run set-admin -- <email>` | ให้/ถอนสิทธิ์ admin (อ่าน `.env`)             |
 
 ---
 

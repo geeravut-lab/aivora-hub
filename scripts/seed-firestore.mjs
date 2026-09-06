@@ -4,18 +4,36 @@
  * document. Safe to run more than once — every write is a merge, so anything
  * edited in the admin page afterwards is preserved except the fields below.
  *
- *   FIREBASE_SERVICE_ACCOUNT='{...}' npm run seed
+ *   npm run seed            # อ่าน FIREBASE_SERVICE_ACCOUNT จาก .env
  */
-import { readFileSync } from "node:fs";
 import { initializeApp, cert } from "firebase-admin/app";
+import { readFileSync } from "node:fs";
 import { getFirestore } from "firebase-admin/firestore";
 
+/**
+ * Read .env when the value is not already in the environment, so the usual
+ * invocation is a bare `npm run seed` after filling in .env — no need to
+ * juggle a service-account file path on the command line.
+ */
+function loadDotEnv() {
+  if (process.env.FIREBASE_SERVICE_ACCOUNT || process.env.GOOGLE_APPLICATION_CREDENTIALS) return;
+  try {
+    process.loadEnvFile(".env");
+  } catch {
+    // no .env, or a Node older than 20.12 — fall through to the error below
+  }
+}
+
 function loadServiceAccount() {
+  loadDotEnv();
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
   if (raw) return JSON.parse(raw);
   const path = process.env.GOOGLE_APPLICATION_CREDENTIALS;
   if (path) return JSON.parse(readFileSync(path, "utf8"));
-  throw new Error("ตั้ง FIREBASE_SERVICE_ACCOUNT หรือ GOOGLE_APPLICATION_CREDENTIALS ก่อน");
+  throw new Error(
+    "ไม่พบ service account — ใส่ FIREBASE_SERVICE_ACCOUNT ใน .env, " +
+      "หรือส่งมาทาง env var / GOOGLE_APPLICATION_CREDENTIALS",
+  );
 }
 
 const account = loadServiceAccount();
