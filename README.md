@@ -47,6 +47,16 @@ serverless function แล้ว build ผ่าน แต่พังตอน 
 
 ## ตั้งค่าครั้งแรก
 
+ขั้นตอนด้านล่างทำคนละที่กัน:
+
+| ทำที่ไหน | ขั้นตอน |
+|---|---|
+| เว็บคอนโซล (เบราว์เซอร์) | 1 Firebase · 6 Netlify · 7 LINE Developers |
+| เครื่องคอมพิวเตอร์ของคุณ (terminal) | 2 ตั้ง `.env` · 3 deploy rules · 4 seed · 5 รัน dev server |
+
+ข้อ 3 และ 4 รันบนเครื่องคุณ แต่ไปแก้ Firebase บนคลาวด์ — ต้องมีไฟล์ service account JSON
+วางไว้ในโฟลเดอร์โปรเจกต์ก่อน (`.gitignore` กันไฟล์ชื่อ `serviceAccount*.json` ไว้แล้ว)
+
 ### 1. Firebase
 
 สร้างโปรเจกต์ใหม่สำหรับ hub แล้วเปิด:
@@ -93,12 +103,17 @@ FIREBASE_SERVICE_ACCOUNT="$(cat serviceAccount.json)" npm run seed
 จะสร้างรายการแอป 6 ตัวและ branding เริ่มต้น (รันซ้ำได้ เป็น merge ทั้งหมด)
 จากนั้นแก้ URL / allow-list / กลุ่ม social–business ที่เหลือได้ในหน้า `/admin`
 
-### 5. รันบนเครื่อง
+### 5. รัน dev server บนเครื่องคุณ (ไม่บังคับ)
+
+ไว้ดูหน้าเว็บและทดสอบก่อนขึ้น Netlify — ข้ามไปข้อ 6 เลยก็ได้
 
 ```bash
 npm install
-npm run dev
+npm run dev     # เปิด http://localhost:5173
 ```
+
+ใน dev server นี้ LINE login จะยังไม่ทำงาน เพราะ LIFF ต้องเปิดจากในแอป LINE
+และ Endpoint URL ต้องเป็น https — หน้า `/auth` (อีเมล/Google) ใช้ได้ตามปกติ
 
 ### 6. Deploy บน Netlify
 

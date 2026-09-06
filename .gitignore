@@ -38,3 +38,7 @@ dist-ssr
 
 # Build output
 .netlify
+
+# Firebase service account keys — never commit
+serviceAccount*.json
+*-firebase-adminsdk-*.json
