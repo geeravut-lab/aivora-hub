@@ -1,0 +1,9 @@
+[build]
+  command = "npm run build"
+  # Nitro's netlify preset puts the static assets in dist/ and writes the SSR
+  # handler to .netlify/functions-internal/server, which Netlify picks up on its
+  # own (path "/*", preferStatic). Nothing else needs wiring here.
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "22"

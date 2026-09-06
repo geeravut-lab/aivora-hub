@@ -1,0 +1,20 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // The logo is shown on the public sign-in screen, so reads are open.
+    // Uploads are admin-only, capped at 5 MB, and must be an image.
+    match /branding/{file} {
+      allow read: if true;
+      allow write: if request.auth != null
+                   && request.auth.token.admin == true
+                   && request.resource.size < 5 * 1024 * 1024
+                   && request.resource.contentType.matches('image/.*');
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

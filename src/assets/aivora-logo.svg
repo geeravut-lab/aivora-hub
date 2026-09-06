@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" role="img" aria-label="Aivora">
+  <rect width="96" height="96" rx="24" fill="#0B8F4A"/>
+  <path d="M48 22 L70 70 H58.5 L48 45.5 L37.5 70 H26 Z" fill="#FFFFFF"/>
+  <circle cx="48" cy="70" r="5" fill="#FFFFFF" opacity="0.75"/>
+</svg>
