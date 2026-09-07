@@ -15,19 +15,30 @@ import {
 const AUDIENCE =
   "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit";
 
-/** app slug -> env var holding that project's service-account JSON */
-const SERVICE_ACCOUNT_SECRETS: Record<string, string> = {
-  tantun: "FIREBASE_SA_TANTUN",
-  jaiklai: "FIREBASE_SA_JAIKLAI",
-  harmony: "FIREBASE_SA_HARMONY",
-  songmu: "FIREBASE_SA_SONGMU",
-  youngwai: "FIREBASE_SA_YOUNGWAI",
-};
+/**
+ * Slugs are typed by an admin and stored in Firestore, so they are untrusted
+ * input on the way to a process.env lookup. Only this shape gets through.
+ */
+const APP_SLUG_PATTERN = /^[a-z0-9][a-z0-9._-]{0,63}$/;
+
+/**
+ * Derive the secret name from the slug rather than keeping a table of them:
+ * adding a Social app in the Launcher UI is then enough on its own, with no
+ * code change standing between the admin and a working SSO handoff.
+ * `tantun` -> `FIREBASE_SA_TANTUN`, `life-os` -> `FIREBASE_SA_LIFE_OS`.
+ */
+function serviceAccountEnvName(appSlug: string): string | null {
+  if (!APP_SLUG_PATTERN.test(appSlug)) return null;
+  return `FIREBASE_SA_${appSlug.toUpperCase().replace(/[-.]/g, "_")}`;
+}
 
 function loadServiceAccount(appSlug: string): ServiceAccount | null {
-  const secretName = SERVICE_ACCOUNT_SECRETS[appSlug];
+  const secretName = serviceAccountEnvName(appSlug);
   if (!secretName) return null;
   const raw = process.env[secretName];
+  // An app with no service account configured is an ordinary state, not a
+  // failure — the exchange answers `firebase: null` and the child app falls
+  // back to its own login.
   if (!raw) return null;
   try {
     return parseServiceAccount(raw, secretName);
