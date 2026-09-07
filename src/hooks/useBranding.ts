@@ -21,14 +21,21 @@ export function useBranding() {
   const query = useQuery({
     queryKey: ["branding"],
     queryFn: async (): Promise<Branding> => {
-      const snap = await getDoc(doc(db, COLLECTIONS.branding, BRANDING_DOC_ID));
-      if (!snap.exists()) return DEFAULT_BRANDING;
-      const data = snap.data() as Partial<BrandingDoc>;
-      return {
-        brand_name: data.brandName || DEFAULT_BRANDING.brand_name,
-        tagline: data.tagline || DEFAULT_BRANDING.tagline,
-        logoSrc: data.logoUrl || DEFAULT_BRANDING.logoSrc,
-      };
+      try {
+        const snap = await getDoc(doc(db, COLLECTIONS.branding, BRANDING_DOC_ID));
+        if (!snap.exists()) return DEFAULT_BRANDING;
+        const data = snap.data() as Partial<BrandingDoc>;
+        return {
+          brand_name: data.brandName || DEFAULT_BRANDING.brand_name,
+          tagline: data.tagline || DEFAULT_BRANDING.tagline,
+          logoSrc: data.logoUrl || DEFAULT_BRANDING.logoSrc,
+        };
+      } catch (error) {
+        // The fallback below is indistinguishable from "branding not seeded
+        // yet", so leave the real reason somewhere a reader can find it.
+        console.error("[branding] อ่าน branding ไม่สำเร็จ — ใช้ค่าเริ่มต้นแทน", error);
+        throw error;
+      }
     },
     staleTime: 5 * 60 * 1000,
   });

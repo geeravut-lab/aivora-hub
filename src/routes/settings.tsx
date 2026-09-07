@@ -57,6 +57,9 @@ function SettingsPage() {
       const [apps, hidden] = await Promise.all([listApps(), listHiddenAppIds(user!.uid)]);
       return apps.map((app) => ({ ...app, enabled: !hidden.has(app.id) }));
     },
+    // A rules or config failure is permanent — retrying three times only
+    // delays the message and leaves the list looking empty in the meantime.
+    retry: 1,
   });
 
   const toggleApp = useMutation({
@@ -119,6 +122,25 @@ function SettingsPage() {
         <p className="mt-1 text-xs text-muted-foreground">
           เลือกได้ว่าจะแสดงแอปไหนบนหน้า Launcher ของคุณ (การตั้งค่านี้เป็นของคุณคนเดียว)
         </p>
+        {appsQuery.isError ? (
+          // Without this branch an unreadable collection renders as an empty
+          // list, which is indistinguishable from "no apps configured yet".
+          <div className="mt-4 rounded-2xl border border-destructive/40 bg-destructive/5 p-4">
+            <p className="text-sm font-medium">โหลดรายการแอปไม่สำเร็จ</p>
+            <p className="mt-2 break-words text-xs text-muted-foreground">
+              {appsQuery.error instanceof Error ? appsQuery.error.message : "ไม่ทราบสาเหตุ"}
+            </p>
+            <Button
+              variant="outline"
+              size="sm"
+              className="mt-4 rounded-full"
+              onClick={() => void appsQuery.refetch()}
+            >
+              ลองอีกครั้ง
+            </Button>
+          </div>
+        ) : null}
+
         <ul className="mt-4 space-y-3">
           {(appsQuery.data ?? []).map((app) => (
             <li key={app.id} className="rounded-2xl border border-border/70 p-4">

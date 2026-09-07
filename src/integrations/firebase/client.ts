@@ -34,7 +34,11 @@ function readConfig() {
 }
 
 function createApp(): FirebaseApp {
-  return getApps().length > 0 ? getApp() : initializeApp(readConfig());
+  if (getApps().length > 0) return getApp();
+  const config = readConfig();
+  // Makes a client/server project mismatch visible without digging into a build.
+  console.info(`[firebase] client projectId: ${config.projectId}`);
+  return initializeApp(config);
 }
 
 /**

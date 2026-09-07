@@ -215,7 +215,13 @@ function AppsSection({
   const [draft, setDraft] = useState<Draft | null>(null);
   const [busy, setBusy] = useState(false);
 
-  const appsQuery = useQuery({ queryKey: ["admin-apps"], queryFn: listApps });
+  const appsQuery = useQuery({
+    queryKey: ["admin-apps"],
+    queryFn: listApps,
+    // A rules or config failure is permanent — retrying three times only
+    // delays the message and leaves the list looking empty in the meantime.
+    retry: 1,
+  });
 
   function refresh() {
     void queryClient.invalidateQueries({ queryKey: ["admin-apps"] });
@@ -375,6 +381,25 @@ function AppsSection({
               ยกเลิก
             </Button>
           </div>
+        </div>
+      ) : null}
+
+      {appsQuery.isError ? (
+        // Without this branch an unreadable collection renders as an empty
+        // list, which is indistinguishable from "no apps configured yet".
+        <div className="mt-5 rounded-2xl border border-destructive/40 bg-destructive/5 p-4">
+          <p className="text-sm font-medium">โหลดรายการแอปไม่สำเร็จ</p>
+          <p className="mt-2 break-words text-xs text-muted-foreground">
+            {appsQuery.error instanceof Error ? appsQuery.error.message : "ไม่ทราบสาเหตุ"}
+          </p>
+          <Button
+            variant="outline"
+            size="sm"
+            className="mt-4 rounded-full"
+            onClick={() => void appsQuery.refetch()}
+          >
+            ลองอีกครั้ง
+          </Button>
         </div>
       ) : null}
 
