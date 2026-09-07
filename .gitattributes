@@ -1,0 +1,17 @@
+# Normalize line endings: LF in the repo, LF on checkout everywhere.
+# Keeps Windows dev machines and Linux (Netlify) builds from producing
+# whole-file diffs with no real changes.
+* text=auto eol=lf
+
+*.sh text eol=lf
+
+# Binary files: never touch their contents.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.webp binary
+*.ico  binary
+*.woff binary
+*.woff2 binary
+*.pdf  binary
+*.zip  binary
