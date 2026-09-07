@@ -119,6 +119,62 @@ const LIFE_OS_PROMPT = (
 หมายเหตุ: Life OS ไม่ใช้ Firebase จึงไม่ต้องใช้ custom token — ใช้ผลลัพธ์ user จาก exchange
 สร้าง/ผูกบัญชีใน Lovable Cloud ของตัวเองด้วย service role ฝั่งเซิร์ฟเวอร์เท่านั้น`;
 
+const CHILD_APP_FIX_PROMPT = (
+  hub: string,
+) => `แอปนี้เป็นแอปลูกฝั่ง Social ของ Aivora Hub ที่ต้องล็อกอินผ่าน SSO
+งานนี้แก้ 2 เรื่อง: หน้า /sso/callback แสดงผลพัง และ flow แลกตั๋ว
+
+## ปัญหาที่พิสูจน์แล้ว — asset path เป็น relative
+
+เปิด https://<โดเมนแอปนี้>/sso/callback แล้วหน้าเว็บขึ้นมาแบบไม่มี CSS
+สาเหตุคือ index.html อ้าง asset แบบ relative (เช่น "./assets/index.js" หรือ "assets/index.js")
+พออยู่ที่ route ซ้อนชั้น /sso/callback เบราว์เซอร์จึงไปขอที่ /sso/assets/... ซึ่ง 404
+ผลไม่ใช่แค่หน้าตาเพี้ยน — JS ที่ใช้แลกตั๋วก็ไม่ถูกโหลด SSO จึงไม่ทำงานเลย
+(หน้าแรก / ไม่พัง เพราะ relative path บังเอิญตรงกับ root)
+
+แก้:
+1) ใน vite.config.ts ตั้ง base: "/" (ถ้ามี base เป็น "./" หรือค่าอื่น ให้เปลี่ยน)
+2) npm run build แล้วเปิด dist/index.html ยืนยันว่า src/href ทุกตัวขึ้นต้นด้วย "/"
+   ไม่มี "./" และไม่มี path ที่ไม่มี slash นำหน้า
+3) ยืนยัน SPA fallback: ต้องมี public/_redirects บรรทัด  /*  /index.html  200
+   (หรือ [[redirects]] ใน netlify.toml) ไม่งั้น /sso/callback จะ 404 ตั้งแต่ต้น
+4) หลัง deploy เช็คด้วย curl: curl -I https://<โดเมน>/assets/<ชื่อไฟล์จริง>.js
+   ต้องได้ 200 และ content-type เป็น javascript ไม่ใช่ text/html
+
+## flow SSO ที่ต้องมี (ตรวจของเดิม ถ้ายังไม่มีให้ทำ)
+
+ค่าคงที่:
+- HUB_URL = ${hub}
+- APP_SLUG = <slug ของแอปนี้ ต้องตรงกับที่ตั้งในหน้าจัดการ Launcher ของ hub>
+- CALLBACK = <origin ของแอปนี้>/sso/callback (ต้องอยู่ใน allow-list ที่ hub แล้ว)
+
+1) ปุ่ม "เข้าสู่ระบบด้วย LINE (Aivora)" บนหน้า login เดิม กดแล้วไปที่
+   ${hub}/sso/authorize?app=<APP_SLUG>&return=<CALLBACK ที่ encodeURIComponent แล้ว>
+2) หน้า /sso/callback อ่าน query param "sso_ticket"
+3) ส่ง ticket ไปแลกที่ serverless function ของแอปนี้เอง (เช่น Netlify function sso-exchange)
+   ห้าม fetch ไป hub ตรงจากเบราว์เซอร์เด็ดขาด — ตั๋วและข้อมูลผู้ใช้จะรั่วอยู่ในโค้ดหน้าเว็บ
+4) ใน function: POST { ticket } ไปที่ ${hub}/api/public/sso/exchange
+   ได้กลับมาเป็น
+   { user: { id, display_name, avatar_url, email, roles }, app_slug,
+     firebase: { custom_token, project_id } | null }
+   - ตรวจ app_slug ตรงกับ APP_SLUG ของเรา ไม่ตรงให้ปฏิเสธ
+   - ถ้า firebase ไม่ใช่ null ตรวจ project_id ตรงกับ projectId ของ Firebase แอปนี้ ไม่ตรงให้ปฏิเสธ
+   - ไม่ต้องใช้ Firebase Admin SDK และไม่ต้องเก็บ service account ในแอปลูก hub เซ็นให้แล้ว
+5) client เรียก signInWithCustomToken(auth, custom_token) แล้ว upsert โปรไฟล์
+   (email / display_name / avatar_url) ตามสคีมาเดิม แล้ว redirect เข้าหน้าหลัก
+   ถ้า firebase เป็น null (แอปยังไม่ได้ตั้ง service account ที่ hub) ให้พาไปหน้า login เดิม
+   พร้อมข้อความ ไม่ใช่ค้างหน้าขาว
+6) error ที่ต้องรองรับ: ตั๋วหมดอายุ (60 วินาที) / ใช้ซ้ำ / invalid_ticket
+   แสดงข้อความแล้วกลับหน้า login เดิม
+
+ห้ามลบหรือแก้ระบบล็อกอินเดิม (email/password และ Google) — SSO เป็นทางเลือกเพิ่ม ไม่ใช่ตัวแทน
+ห้ามเก็บ service account key ฝั่ง client และห้ามแลกตั๋วในโค้ดเบราว์เซอร์
+
+## ก่อนบอกว่าเสร็จ
+- npm run build ผ่าน
+- ยืนยันด้วย curl ว่า asset โหลด 200 ที่ /sso/callback (ไม่ใช่แค่ที่ /)
+- บอกมาด้วยว่ายังไม่ได้ทดสอบอะไร และต้องให้คนทดสอบจริงตรงไหน`;
+
 function Snippet({ title, code }: { title: string; code: string }) {
   const [copied, setCopied] = useState(false);
   return (
@@ -187,6 +243,13 @@ function DocsPage() {
           สำคัญ: ห้ามแลกตั๋วจากฝั่งเบราว์เซอร์โดยตรงในโปรดักชัน ให้ทำผ่านฟังก์ชันเซิร์ฟเวอร์
           เพื่อไม่ให้ตั๋วและข้อมูลผู้ใช้รั่วไปอยู่ในโค้ดหน้าเว็บ
         </p>
+        <p className="mt-3 text-xs leading-relaxed text-muted-foreground">
+          ถ้าหน้า <span className="font-mono">/sso/callback</span> ของแอปลูกขึ้นมาแบบไม่มี CSS
+          แปลว่าแอปนั้น build ด้วย asset path แบบ relative — ที่ route
+          ซ้อนชั้นเบราว์เซอร์จะไปขอไฟล์ที่ <span className="font-mono">/sso/assets/...</span> แล้ว
+          404 ทั้ง CSS และ JS ที่ใช้แลกตั๋ว แก้ที่แอปลูกด้วย{" "}
+          <span className="font-mono">base: &quot;/&quot;</span> ใน vite config
+        </p>
       </section>
 
       <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
@@ -201,16 +264,45 @@ function DocsPage() {
       </section>
 
       <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
-        <h2 className="font-semibold">Firebase custom token (5 แอปบน Netlify)</h2>
+        <h2 className="font-semibold">Firebase custom token</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          service account ของทั้ง 5 แอปถูกเก็บเป็น secret ที่ hub แล้ว (tantun, jaiklai, harmony,
-          songmu, youngwai) ดังนั้น{" "}
-          <span className="font-mono text-xs">/api/public/sso/exchange</span> จะคืน{" "}
-          <span className="font-mono text-xs">firebase.custom_token</span> มาให้ตรงกับ Firebase
+          hub ไม่ได้เก็บรายชื่อแอปไว้ในโค้ด แต่มองหา secret ชื่อ{" "}
+          <span className="font-mono text-xs">FIREBASE_SA_&lt;SLUG&gt;</span> ตาม slug ของแอปนั้น
+          โดยอัตโนมัติ (ตัวใหญ่ทั้งหมด และ <span className="font-mono text-xs">-</span> กับ{" "}
+          <span className="font-mono text-xs">.</span> เปลี่ยนเป็น{" "}
+          <span className="font-mono text-xs">_</span>) เพิ่มแอปใหม่จึงไม่ต้องแก้โค้ด
+          ปัจจุบันตั้งไว้แล้ว 5 ตัว (tantun, jaiklai, harmony, songmu, youngwai) เมื่อเจอ secret
+          ของแอปไหน <span className="font-mono text-xs">/api/public/sso/exchange</span> จะคืน{" "}
+          <span className="font-mono text-xs">firebase.custom_token</span> ที่ตรงกับ Firebase
           project ของแอปนั้น แอปลูกเพียงเรียก{" "}
           <span className="font-mono text-xs">signInWithCustomToken()</span> โดยไม่ต้องเก็บ service
-          account เองอีก
+          account เองอีก ถ้ายังไม่ได้ตั้ง secret จะคืน{" "}
+          <span className="font-mono text-xs">firebase: null</span> และแอปลูกต้องให้ผู้ใช้ล็อกอินเอง
         </p>
+      </section>
+
+      <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
+        <h2 className="font-semibold">เพิ่มแอป Social ใหม่ต้องทำอะไรบ้าง</h2>
+        <ol className="mt-3 list-decimal space-y-2 pl-5 text-sm text-muted-foreground">
+          <li>
+            เพิ่มแอปในหน้าจัดการ Launcher (แอดมิน) ตั้ง slug และ URL จริง แล้วใส่ URL ปลายทาง{" "}
+            <span className="font-mono text-xs">&lt;origin แอปลูก&gt;/sso/callback</span> ใน
+            allow-list
+          </li>
+          <li>
+            เพิ่ม environment variable ที่ Netlify ของ hub:{" "}
+            <span className="font-mono text-xs">FIREBASE_SA_&lt;SLUG ตัวใหญ่&gt;</span> (
+            <span className="font-mono text-xs">-</span> ใน slug เปลี่ยนเป็น{" "}
+            <span className="font-mono text-xs">_</span>) ค่าเป็น service account JSON ทั้งก้อนของ
+            Firebase project ของแอปนั้น แล้ว trigger build ใหม่ — ถ้าไม่ใส่ SSO จะยังทำงาน แต่คืน{" "}
+            <span className="font-mono text-xs">firebase: null</span> แอปลูกต้องให้ผู้ใช้ล็อกอินเอง
+          </li>
+          <li>ไปที่แอปลูก ก๊อป prompt ข้างล่างไปสั่ง AI ที่ดูแล repo ของแอปนั้น</li>
+        </ol>
+        <Snippet
+          title="Prompt สำหรับแอปลูก Social (แก้ asset path + SSO)"
+          code={CHILD_APP_FIX_PROMPT(hub)}
+        />
       </section>
 
       <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
