@@ -160,6 +160,9 @@ const CHILD_APP_FIX_PROMPT = (
    - ตรวจ app_slug ตรงกับ APP_SLUG ของเรา ไม่ตรงให้ปฏิเสธ
    - ถ้า firebase ไม่ใช่ null ตรวจ project_id ตรงกับ projectId ของ Firebase แอปนี้ ไม่ตรงให้ปฏิเสธ
    - ไม่ต้องใช้ Firebase Admin SDK และไม่ต้องเก็บ service account ในแอปลูก hub เซ็นให้แล้ว
+   - uid ใน custom token เป็นรูป aivora:<id> — ตรวจ prefix ได้ แต่อย่าคาดหวัง uid ดิบ
+   - display_name / email / avatar_url จาก hub เป็น null ได้ (ไม่ใช่ undefined)
+     การตรวจ shape ต้องรับ null ด้วย
 5) client เรียก signInWithCustomToken(auth, custom_token) แล้ว upsert โปรไฟล์
    (email / display_name / avatar_url) ตามสคีมาเดิม แล้ว redirect เข้าหน้าหลัก
    ถ้า firebase เป็น null (แอปยังไม่ได้ตั้ง service account ที่ hub) ให้พาไปหน้า login เดิม
@@ -278,6 +281,14 @@ function DocsPage() {
           <span className="font-mono text-xs">signInWithCustomToken()</span> โดยไม่ต้องเก็บ service
           account เองอีก ถ้ายังไม่ได้ตั้ง secret จะคืน{" "}
           <span className="font-mono text-xs">firebase: null</span> และแอปลูกต้องให้ผู้ใช้ล็อกอินเอง
+        </p>
+        <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
+          uid ใน custom token ที่ hub ออกให้ จะอยู่ในรูป{" "}
+          <span className="font-mono text-xs">aivora:&lt;user id&gt;</span> เสมอ แอปลูกควรตรวจ
+          prefix นี้ก่อนรับ token — เป็นการกันไม่ให้ token จาก hub
+          ไปทับบัญชีที่ผู้ใช้สมัครไว้เองในแอปลูก ส่วน{" "}
+          <span className="font-mono text-xs">claims.aivora_user_id</span> เป็น id ดิบ ใช้ map
+          กลับมาหาผู้ใช้ที่ hub ได้
         </p>
       </section>
 
