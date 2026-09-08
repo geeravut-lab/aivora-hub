@@ -16,6 +16,24 @@ const AUDIENCE =
   "https://identitytoolkit.googleapis.com/google.identity.identitytoolkit.v1.IdentityToolkit";
 
 /**
+ * Every uid the hub signs carries this prefix. Do not remove it.
+ *
+ * A child app's Firebase project also holds accounts its users made themselves
+ * (Google, email/password), and Firebase never generates a uid starting with
+ * "aivora:". Keeping the namespace separate is what stops a token minted here
+ * from landing on top of one of those accounts, so the child apps check the
+ * prefix before they accept a token and reject anything without it. The
+ * convention predates the hub — the child apps minted their own tokens this way
+ * — and their guard is still in place, so dropping it breaks all five of them.
+ */
+const UID_PREFIX = "aivora:";
+
+/** Namespaced uid for the token. Already-prefixed input is left alone. */
+function namespacedUid(uid: string): string {
+  return uid.startsWith(UID_PREFIX) ? uid : `${UID_PREFIX}${uid}`;
+}
+
+/**
  * Slugs are typed by an admin and stored in Firestore, so they are untrusted
  * input on the way to a process.env lookup. Only this shape gets through.
  */
@@ -55,6 +73,10 @@ export function hasFirebaseServiceAccount(appSlug: string): boolean {
 /**
  * Returns a Firebase custom token (valid 1 hour) for the given central user,
  * or null when the app has no service account configured.
+ *
+ * `uid` comes in raw and is namespaced on the way into the token; callers keep
+ * passing the hub's own id. `claims.aivora_user_id` stays raw on purpose —
+ * that is what a child app maps back to a user here.
  */
 export async function mintFirebaseCustomToken(
   appSlug: string,
@@ -71,7 +93,7 @@ export async function mintFirebaseCustomToken(
     aud: AUDIENCE,
     iat: now,
     exp: now + 3600,
-    uid,
+    uid: namespacedUid(uid),
   };
   if (claims && Object.keys(claims).length > 0) payload["claims"] = claims;
 
