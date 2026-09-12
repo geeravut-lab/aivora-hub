@@ -138,8 +138,8 @@ export function AppLauncher({
 
   return (
     <main className="mx-auto min-h-screen w-full max-w-3xl px-5 pb-16 pt-10">
-      <header className="flex items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <header className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-center gap-3">
           {profile?.avatarUrl ? (
             <img
               src={profile.avatarUrl}
@@ -153,11 +153,11 @@ export function AppLauncher({
               className="size-12 rounded-2xl border border-border bg-card object-contain p-1"
             />
           )}
-          <div>
-            <p className="text-xs uppercase tracking-widest text-muted-foreground">
+          <div className="min-w-0">
+            <p className="truncate text-xs uppercase tracking-widest text-muted-foreground">
               {branding.brand_name}
             </p>
-            <h1 className="text-lg font-semibold">
+            <h1 className="break-words text-lg font-semibold">
               {t("launcher.hello")}{" "}
               {profile?.displayName ??
                 user.displayName ??
@@ -166,37 +166,39 @@ export function AppLauncher({
             </h1>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex shrink-0 flex-col items-end gap-2">
           {languageToggle}
-          {isAdmin ? (
+          <div className="flex items-center gap-1">
+            {isAdmin ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => navigate({ to: "/admin" })}
+                aria-label={t("launcher.manage")}
+              >
+                <Shield className="size-5" />
+              </Button>
+            ) : null}
             <Button
               variant="ghost"
               size="icon"
-              onClick={() => navigate({ to: "/admin" })}
-              aria-label={t("launcher.manage")}
+              onClick={() => navigate({ to: settingsPath })}
+              aria-label={t("launcher.settings")}
             >
-              <Shield className="size-5" />
+              <Settings2 className="size-5" />
             </Button>
-          ) : null}
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={() => navigate({ to: settingsPath })}
-            aria-label={t("launcher.settings")}
-          >
-            <Settings2 className="size-5" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label={t("common.signOut")}
-            onClick={async () => {
-              await signOut(auth);
-              toast.success(t("common.signedOut"));
-            }}
-          >
-            <LogOut className="size-5" />
-          </Button>
+            <Button
+              variant="ghost"
+              size="icon"
+              aria-label={t("common.signOut")}
+              onClick={async () => {
+                await signOut(auth);
+                toast.success(t("common.signedOut"));
+              }}
+            >
+              <LogOut className="size-5" />
+            </Button>
+          </div>
         </div>
       </header>
 
@@ -255,7 +257,7 @@ export function AppLauncher({
                   )}
                 </div>
                 <span className="font-semibold">{localized(lang, app.name, app.nameEn)}</span>
-                <span className="line-clamp-2 text-sm text-muted-foreground">
+                <span className="whitespace-pre-line text-sm text-muted-foreground">
                   {localized(lang, app.description ?? "", app.descriptionEn)}
                 </span>
               </button>
