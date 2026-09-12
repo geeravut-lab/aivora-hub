@@ -60,123 +60,145 @@ export async function handler(event) {
   return { statusCode: 200, body: JSON.stringify(data) };
 }`;
 
-const AI_PROMPT = (
+const SOCIAL_APP_PROMPT = (
   hub: string,
-) => `เพิ่มการล็อกอินแบบ SSO ผ่าน "Aivora hub" เข้ามาในแอปนี้ โดยห้ามลบหรือแก้ระบบล็อกอินเดิม
-(Firebase email/password และ Google) — SSO เป็นทางเลือกเพิ่ม ไม่ใช่ตัวแทน
+) => `แอปนี้เป็นแอปลูกฝั่ง Social ของ Aivora Hub ต้องรองรับการล็อกอินผ่าน SSO ของ hub
+prompt นี้ผ่านการใช้งานจริงกับแอปลูกตัวแรกมาแล้ว กับดักทุกข้อในนี้เคยทำให้พังมาจริง
+ห้ามข้าม แม้จะดูเหมือนไม่เกี่ยวกับแอปนี้
 
-ค่าคงที่:
-- HUB_URL = ${hub}
-- APP_SLUG = <ใส่ slug ของแอปนี้ เช่น tantun>
-- CALLBACK = \${window.location.origin}/sso/callback  (ต้องถูกใส่ไว้ใน allow-list ที่ hub แล้ว)
+ค่าคงที่ที่ต้องแก้ก่อนใช้:
+- HUB_URL   = ${hub}
+- APP_SLUG  = <slug ของแอปนี้ ต้องตรงกับที่ตั้งไว้ในหน้าจัดการ Launcher ของ hub>
+- CALLBACK  = <origin ของแอปนี้>/sso/callback  (ต้องอยู่ใน allow-list ที่ hub แล้ว)
 
-สิ่งที่ต้องทำ:
-1) สร้างหน้า /sso/callback อ่าน query param "sso_ticket"
-2) ส่ง ticket ไปแลกที่ serverless function ของเราเอง (Netlify function ชื่อ sso-exchange)
-   ห้าม fetch ไปที่ hub ตรงจากเบราว์เซอร์
-3) ใน sso-exchange: POST { ticket } ไปที่ \${HUB_URL}/api/public/sso/exchange
-   จะได้ { user: { id, display_name, avatar_url, email, roles }, app_slug,
-           firebase: { custom_token, project_id } }
-   - ตรวจว่า app_slug ตรงกับ APP_SLUG ของเรา และ firebase.project_id ตรงกับ
-     projectId ของ Firebase แอปนี้ ถ้าไม่ตรงให้ปฏิเสธ
-   - ไม่ต้องใช้ Firebase Admin SDK และไม่ต้องเก็บ service account ในแอปลูกอีก
-     เพราะ hub เซ็น custom token ให้แล้ว (uid = user.id ของ Aivora, อายุ 1 ชม.)
-   - ส่ง firebase.custom_token + user กลับไปให้ client
-4) ที่ client เรียก signInWithCustomToken(auth, custom_token) แล้ว upsert โปรไฟล์
-   (email/display_name/avatar_url) ตามสคีมาเดิม จากนั้น redirect เข้าหน้าหลัก
-   ตั้งแต่จุดนี้โค้ด Firebase เดิมทั้งหมดทำงานต่อได้ปกติ
-5) เพิ่มปุ่ม "เข้าสู่ระบบด้วย LINE (Aivora)" บนหน้า login เดิม กดแล้วไปที่
-   \${HUB_URL}/sso/authorize?app=\${APP_SLUG}&return=\${encodeURIComponent(CALLBACK)}
-6) จัดการ error: ตั๋วหมดอายุ (60 วินาที) / ใช้ซ้ำ / invalid_ticket ให้แสดงข้อความและกลับหน้า login เดิม
+หลักการที่ห้ามละเมิด:
+- ห้ามลบหรือแก้ระบบล็อกอินเดิมของแอป (anonymous / Google / email) SSO เป็นทางเลือกเพิ่ม
+- ห้ามแลกตั๋วจากโค้ดฝั่งเบราว์เซอร์ ต้องผ่าน serverless function ของแอปนี้เท่านั้น
+- ห้ามเก็บ service account key ในแอปลูก hub เซ็น custom token ให้แล้ว
+- ผู้ใช้ที่มาทาง SSO ต้องได้สิทธิ์เท่าผู้ใช้ทั่วไป ห้ามรับ role จาก hub มาใช้
 
-ข้อกำหนดความปลอดภัย: ห้ามเก็บ service account key หรือแลกตั๋วในโค้ดฝั่ง client,
-ตรวจ ticket ทุกครั้งฝั่งเซิร์ฟเวอร์เท่านั้น`;
+=== ขั้นที่ 1 — asset path ต้องเป็น absolute ===
 
-const LIFE_OS_PROMPT = (
-  hub: string,
-) => `เพิ่มการล็อกอินแบบ SSO ผ่าน "Aivora hub" ให้แอปนี้ (Life OS บน Lovable + Lovable Cloud)
-โดยไม่แก้ระบบล็อกอินเดิม (อีเมล/Google) — SSO เป็นทางเลือกเพิ่ม
+กับดักข้อนี้ทำให้หน้า /sso/callback ขึ้นมาแบบไม่มี CSS และ JS ไม่ทำงานเลย
+สาเหตุ: index.html อ้าง asset แบบ relative (เช่น "styles.css" หรือ "./app.js")
+พออยู่ที่ route ซ้อนชั้น /sso/callback เบราว์เซอร์ไปขอที่ /sso/styles.css ซึ่งไม่มีจริง
+แล้ว SPA fallback คืน index.html กลับมาเป็น 200 เบราว์เซอร์ปฏิเสธเพราะ MIME ไม่ตรง
+อาการหลอกตามาก เพราะหน้าแรก / ใช้งานได้ปกติ
 
-ค่าคงที่:
-- HUB_URL = ${hub}
-- APP_SLUG = life-os
-- CALLBACK = \${window.location.origin}/sso/callback (อยู่ใน allow-list ของ hub แล้ว)
+- แก้ asset reference ทุกตัวใน index.html ให้ขึ้นต้นด้วย "/" (css, js, favicon, manifest, รูป, ฟอนต์)
+- ถ้าใช้ bundler ให้ตั้ง base / publicPath เป็น "/"
+- ยืนยันหลัง deploy:
+    curl -sI https://<โดเมน>/styles.css | grep -i content-type   ต้องเป็น text/css
+    curl -sI https://<โดเมน>/app.js     | grep -i content-type   ต้องเป็น javascript
+  ถ้าได้ text/html แปลว่ายังไม่ผ่าน
 
-สิ่งที่ต้องทำ:
-1) สร้าง route /sso/callback (ssr: false) อ่าน query param "sso_ticket"
-2) สร้าง server function (createServerFn, POST) ชื่อ consumeSsoTicket:
-   - POST { ticket } ไปที่ \${HUB_URL}/api/public/sso/exchange
-   - ตรวจว่า app_slug === "life-os" ถ้าไม่ตรงให้ throw
-   - ใช้ supabaseAdmin ของโปรเจกต์นี้: หา user จาก email ที่ได้ ถ้าไม่มีให้
-     createUser({ email, email_confirm: true }) แล้ว upsert profiles
-   - ออก session ด้วย generateLink({ type: "magiclink", email }) แล้ว
-     verifyOtp({ type: "magiclink", token_hash }) เพื่อคืน { access_token, refresh_token }
-3) ที่หน้า callback เรียก supabase.auth.setSession(tokens) แล้ว navigate ไปหน้าหลัก
-4) เพิ่มปุ่ม "เข้าสู่ระบบด้วย LINE (Aivora)" ในหน้า login เดิม → ไปที่
-   \${HUB_URL}/sso/authorize?app=life-os&return=\${encodeURIComponent(CALLBACK)}
-5) จัดการ error: ตั๋วหมดอายุ 60 วินาที / ใช้ซ้ำ / invalid_ticket → แจ้งผู้ใช้และกลับหน้า login
+=== ขั้นที่ 2 — serverless function แลกตั๋ว ===
 
-หมายเหตุ: Life OS ไม่ใช้ Firebase จึงไม่ต้องใช้ custom token — ใช้ผลลัพธ์ user จาก exchange
-สร้าง/ผูกบัญชีใน Lovable Cloud ของตัวเองด้วย service role ฝั่งเซิร์ฟเวอร์เท่านั้น`;
+สร้าง function (เช่น Netlify function ชื่อ sso-exchange) รับ POST { ticket } แล้ว:
 
-const CHILD_APP_FIX_PROMPT = (
-  hub: string,
-) => `แอปนี้เป็นแอปลูกฝั่ง Social ของ Aivora Hub ที่ต้องล็อกอินผ่าน SSO
-งานนี้แก้ 2 เรื่อง: หน้า /sso/callback แสดงผลพัง และ flow แลกตั๋ว
+1. POST { ticket } ไปที่ ${hub}/api/public/sso/exchange
+2. hub ตอบกลับเป็น
+   {
+     "user": { "id", "display_name", "avatar_url", "email", "roles" },
+     "app_slug": "<slug>",
+     "firebase": { "custom_token", "project_id" }   // เป็น null ได้
+   }
+3. ตรวจ app_slug ตรงกับ APP_SLUG ไม่ตรงให้ปฏิเสธ
+4. ถ้า firebase เป็น null แปลว่าแอปนี้ยังไม่ได้ตั้ง service account ที่ hub
+   ให้คืน error ที่อ่านรู้เรื่อง อย่าปล่อยหน้าขาว
+5. ตรวจ firebase.project_id ตรงกับ projectId ของ Firebase แอปนี้ ไม่ตรงให้ปฏิเสธ
+6. decode payload ของ custom_token (decode เฉย ๆ ไม่ต้อง verify — เราไม่มีคีย์)
+   แล้วตรวจว่า uid ขึ้นต้นด้วย "aivora:" ไม่ใช่ให้ปฏิเสธ
+   ด่านนี้สำคัญ: uid ที่ Firebase สร้างเองไม่มีวันขึ้นต้นด้วย aivora: การตรวจ prefix
+   จึงกันไม่ให้ token จาก hub ไปทับบัญชีที่ผู้ใช้สมัครเองในแอปนี้
+7. คืน custom_token + ข้อมูลโปรไฟล์ให้ client
 
-## ปัญหาที่พิสูจน์แล้ว — asset path เป็น relative
+กับดัก 2 ข้อในขั้นนี้ที่เคยทำให้เสียเวลาหลายรอบ:
 
-เปิด https://<โดเมนแอปนี้>/sso/callback แล้วหน้าเว็บขึ้นมาแบบไม่มี CSS
-สาเหตุคือ index.html อ้าง asset แบบ relative (เช่น "./assets/index.js" หรือ "assets/index.js")
-พออยู่ที่ route ซ้อนชั้น /sso/callback เบราว์เซอร์จึงไปขอที่ /sso/assets/... ซึ่ง 404
-ผลไม่ใช่แค่หน้าตาเพี้ยน — JS ที่ใช้แลกตั๋วก็ไม่ถูกโหลด SSO จึงไม่ทำงานเลย
-(หน้าแรก / ไม่พัง เพราะ relative path บังเอิญตรงกับ root)
+(ก) การตรวจรูปร่าง payload ต้องรับค่า null
+    hub คืน null (ไม่ใช่ undefined) สำหรับ display_name / email / avatar_url ที่ไม่มีค่า
+    ผู้ใช้ที่ล็อกอินผ่าน LINE มักไม่มีอีเมล ถ้าเช็คด้วย typeof === 'string' อย่างเดียว
+    จะตกทันที ใช้ (v == null || typeof v === 'string') แทน
+    ส่วน user.id ยังต้องเป็น string ที่ไม่ว่าง ห้ามผ่อน
 
-แก้:
-1) ใน vite.config.ts ตั้ง base: "/" (ถ้ามี base เป็น "./" หรือค่าอื่น ให้เปลี่ยน)
-2) npm run build แล้วเปิด dist/index.html ยืนยันว่า src/href ทุกตัวขึ้นต้นด้วย "/"
-   ไม่มี "./" และไม่มี path ที่ไม่มี slash นำหน้า
-3) ยืนยัน SPA fallback: ต้องมี public/_redirects บรรทัด  /*  /index.html  200
-   (หรือ [[redirects]] ใน netlify.toml) ไม่งั้น /sso/callback จะ 404 ตั้งแต่ต้น
-4) หลัง deploy เช็คด้วย curl: curl -I https://<โดเมน>/assets/<ชื่อไฟล์จริง>.js
-   ต้องได้ 200 และ content-type เป็น javascript ไม่ใช่ text/html
+(ข) log ทุก error รวมทั้ง error ที่เราตั้งใจโยนเอง
+    ถ้ากลืน error ของตัวเองไว้ log ฝั่งเซิร์ฟเวอร์จะว่างเปล่า แล้วเวลามีปัญหาจะแยกไม่ออก
+    ว่า function crash หรือปฏิเสธอย่างตั้งใจ ให้ log code + message เสมอ (ห้าม log ตัว token)
+    และอย่า map ทุก error เป็น 502 — 502 ทำให้เข้าใจผิดว่า function พัง
+    ใช้ 401 สำหรับตั๋วไม่ถูกต้อง, 403 สำหรับ slug/project ไม่ตรง,
+    409 สำหรับยังไม่ได้ตั้ง service account, 502 เฉพาะตอน hub ติดต่อไม่ได้จริง
 
-## flow SSO ที่ต้องมี (ตรวจของเดิม ถ้ายังไม่มีให้ทำ)
+=== ขั้นที่ 3 — หน้า /sso/callback ===
 
-ค่าคงที่:
-- HUB_URL = ${hub}
-- APP_SLUG = <slug ของแอปนี้ ต้องตรงกับที่ตั้งในหน้าจัดการ Launcher ของ hub>
-- CALLBACK = <origin ของแอปนี้>/sso/callback (ต้องอยู่ใน allow-list ที่ hub แล้ว)
+1. อ่าน query param "sso_ticket"
+2. **ลบ sso_ticket ออกจาก URL ทันทีด้วย history.replaceState ก่อน await ตัวแรก**
+   ตั๋วใช้ได้ครั้งเดียว อายุ 60 วินาที ถ้าผู้ใช้กด refresh จะได้ invalid_ticket
+   แล้วเข้าใจผิดว่าระบบพัง
+3. ส่ง ticket ไปแลกที่ function ของขั้นที่ 2
+4. เก็บ custom_token ที่ได้ไว้ในตัวแปรใน memory
+   ถ้าขั้นตอนถัดไปล้มแล้วต้อง retry ให้ retry เฉพาะ signInWithCustomToken
+   **ห้ามวนกลับไปแลกตั๋วใหม่** เพราะตั๋วถูกใช้ไปแล้ว
+5. เรียก signInWithCustomToken(auth, custom_token)
 
-1) ปุ่ม "เข้าสู่ระบบด้วย LINE (Aivora)" บนหน้า login เดิม กดแล้วไปที่
-   ${hub}/sso/authorize?app=<APP_SLUG>&return=<CALLBACK ที่ encodeURIComponent แล้ว>
-2) หน้า /sso/callback อ่าน query param "sso_ticket"
-3) ส่ง ticket ไปแลกที่ serverless function ของแอปนี้เอง (เช่น Netlify function sso-exchange)
-   ห้าม fetch ไป hub ตรงจากเบราว์เซอร์เด็ดขาด — ตั๋วและข้อมูลผู้ใช้จะรั่วอยู่ในโค้ดหน้าเว็บ
-4) ใน function: POST { ticket } ไปที่ ${hub}/api/public/sso/exchange
-   ได้กลับมาเป็น
-   { user: { id, display_name, avatar_url, email, roles }, app_slug,
-     firebase: { custom_token, project_id } | null }
-   - ตรวจ app_slug ตรงกับ APP_SLUG ของเรา ไม่ตรงให้ปฏิเสธ
-   - ถ้า firebase ไม่ใช่ null ตรวจ project_id ตรงกับ projectId ของ Firebase แอปนี้ ไม่ตรงให้ปฏิเสธ
-   - ไม่ต้องใช้ Firebase Admin SDK และไม่ต้องเก็บ service account ในแอปลูก hub เซ็นให้แล้ว
-   - uid ใน custom token เป็นรูป aivora:<id> — ตรวจ prefix ได้ แต่อย่าคาดหวัง uid ดิบ
-   - display_name / email / avatar_url จาก hub เป็น null ได้ (ไม่ใช่ undefined)
-     การตรวจ shape ต้องรับ null ด้วย
-5) client เรียก signInWithCustomToken(auth, custom_token) แล้ว upsert โปรไฟล์
-   (email / display_name / avatar_url) ตามสคีมาเดิม แล้ว redirect เข้าหน้าหลัก
-   ถ้า firebase เป็น null (แอปยังไม่ได้ตั้ง service account ที่ hub) ให้พาไปหน้า login เดิม
-   พร้อมข้อความ ไม่ใช่ค้างหน้าขาว
-6) error ที่ต้องรองรับ: ตั๋วหมดอายุ (60 วินาที) / ใช้ซ้ำ / invalid_ticket
-   แสดงข้อความแล้วกลับหน้า login เดิม
+=== ขั้นที่ 4 — หลัง sign-in ต้องเรียก bootstrap เอง (ข้อที่พลาดกันมากที่สุด) ===
 
-ห้ามลบหรือแก้ระบบล็อกอินเดิม (email/password และ Google) — SSO เป็นทางเลือกเพิ่ม ไม่ใช่ตัวแทน
-ห้ามเก็บ service account key ฝั่ง client และห้ามแลกตั๋วในโค้ดเบราว์เซอร์
+แอปส่วนใหญ่ผูกการโหลดข้อมูลหลังล็อกอินไว้กับ onAuthStateChanged
+เส้นทาง SSO **ห้ามพึ่ง listener ตัวนั้น** เพราะลำดับการยิงระหว่าง promise ของ
+signInWithCustomToken กับ listener ไม่มีการการันตี ถ้า listener ยิงก่อน await resolve
+มันมักโดน guard ของ flow SSO บล็อกไปเงียบ ๆ แล้วไม่มีอะไรยิงซ้ำอีก
+อาการที่ได้คือ: ล็อกอินสำเร็จจริง (มี user ใน Firebase Auth) แต่หน้าจอหมุนค้างตลอดไป
+ไม่มี error ใน console และ **ไม่มี request ไป Firestore เลยแม้แต่ครั้งเดียว**
 
-## ก่อนบอกว่าเสร็จ
-- npm run build ผ่าน
-- ยืนยันด้วย curl ว่า asset โหลด 200 ที่ /sso/callback (ไม่ใช่แค่ที่ /)
-- บอกมาด้วยว่ายังไม่ได้ทดสอบอะไร และต้องให้คนทดสอบจริงตรงไหน`;
+วิธีแก้:
+- แยกฟังก์ชัน bootstrap ตัวจริง (โหลด/สร้างโปรไฟล์ + โหลดข้อมูล + แสดงหน้าแรก)
+  ออกจาก wrapper ที่มี guard สำหรับ listener
+- เส้นทาง SSO เรียก bootstrap ตัวจริง **ตรง ๆ** หลัง sign-in สำเร็จ
+- คง flag ที่กัน listener ไว้เป็น true ตลอดช่วงที่เรียก bootstrap แบบ explicit
+  เพื่อไม่ให้ทำงานซ้อนกัน
+- ผู้ใช้ใหม่ต้องถูกสร้างโปรไฟล์ตามสคีมาเดิมของแอปทุกฟิลด์ โดยเติมค่าจาก hub
+  (display_name / email / avatar_url) และ role ต้องเป็นค่าเริ่มต้นของผู้ใช้ทั่วไปเสมอ
+- ผู้ใช้เดิมอย่าเขียนทับข้อมูลที่เขาแก้ไว้เอง เติมเฉพาะฟิลด์ที่ว่าง
+- **ห้ามเขียน bootstrap ขึ้นมาใหม่คนละชุดสำหรับ SSO** ให้เรียกตัวเดิม ถ้าจำเป็นก็เพิ่มพารามิเตอร์
+  สองเส้นทางที่แยกกันจะเพี้ยนออกจากกันในภายหลังแน่นอน
+
+=== ขั้นที่ 5 — auth persistence ===
+
+ตั้ง setPersistence(auth, browserLocalPersistence) ก่อนการ sign-in ทุกเส้นทาง
+ค่าเริ่มต้นของ Firebase ใช้ IndexedDB ซึ่งพังได้ในแอปที่มี service worker
+ด้วย error "Database is closing/hidden" แล้วล็อกอินไม่สำเร็จทั้งที่โค้ดถูกทุกอย่าง
+localStorage ไม่มีปัญหานี้ ผลข้างเคียงคือผู้ใช้ที่มี session เดิมใน IndexedDB
+ต้องล็อกอินใหม่หนึ่งครั้ง
+
+=== ขั้นที่ 6 — ห้ามหมุนค้างเงียบ ๆ ===
+
+ทุกข้อข้างบนที่เคยพัง ใช้เวลาหาสาเหตุนานเกินจำเป็นเพราะหน้าจอบอกแค่ "กำลังโหลด"
+
+- ครอบ flow ตั้งแต่แลกตั๋วจนถึง bootstrap ด้วย try/catch แสดงข้อความจริง + ปุ่มลองใหม่
+  ที่พากลับไปหน้า login เดิม
+- ตั้ง timeout ~15 วินาที ถ้ายังไม่จบให้แสดงข้อความ ไม่หมุนต่อ
+- ใส่ console.info ตาม checkpoint สำคัญ อย่างน้อย 6 จุด:
+  พบตั๋ว / แลกตั๋วสำเร็จ / sign-in สำเร็จพร้อม uid / เริ่ม bootstrap /
+  โปรไฟล์พร้อม / bootstrap เสร็จ
+  จุดนี้ทำให้ครั้งหน้าดู console แล้วรู้ทันทีว่าค้างที่ขั้นไหน
+
+=== ขั้นที่ 7 — ปุ่มบนหน้า login ===
+
+เพิ่มปุ่ม "เข้าสู่ระบบด้วย LINE (Aivora)" ไปที่
+${hub}/sso/authorize?app=<APP_SLUG>&return=<CALLBACK ที่ encodeURIComponent แล้ว>
+
+=== ทดสอบก่อนบอกว่าเสร็จ ===
+
+ต้องผ่านครบทั้ง 3 เส้นทาง โดยเปิด DevTools Console ไว้ตลอด:
+1. ล็อกอินเดิมของแอป (anonymous / Google / email) ต้องทำงานเหมือนเดิมทุกประการ
+2. SSO จาก Launcher ในเบราว์เซอร์ปกติ
+3. SSO จาก Launcher ที่เปิดใน LINE
+
+เกณฑ์ผ่าน: ไม่หมุนค้าง เข้าหน้าแรกได้, มีเอกสารโปรไฟล์ของ uid aivora:... เกิดขึ้นใน
+ฐานข้อมูล, console ไม่มี error (CSP ที่บ่นเรื่อง .js.map ของ Firebase SDK ไม่ต้องสนใจ
+เป็น sourcemap ไม่กระทบการทำงาน)
+
+การแลกตั๋วจริงต้องกดจากหน้า Launcher เท่านั้น จำลองเองไม่ได้เพราะตั๋วอายุ 60 วินาที
+ใช้ครั้งเดียว — รายงานมาด้วยว่าอะไรที่ยังไม่ได้ทดสอบและต้องให้คนทดสอบ`;
 
 function Snippet({ title, code }: { title: string; code: string }) {
   const [copied, setCopied] = useState(false);
@@ -256,17 +278,6 @@ function DocsPage() {
       </section>
 
       <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
-        <h2 className="font-semibold">Prompt สำหรับสั่ง AI ในแอปลูก</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          ก๊อป prompt นี้ไปวางในเครื่องมือ AI ที่ใช้สร้างแอปลูก แก้แค่{" "}
-          <span className="font-mono text-xs">APP_SLUG</span> ให้ตรงกับแอปนั้น — prompt ระบุชัดว่า
-          “ห้ามลบล็อกอินเดิม” ดังนั้นผู้ใช้ที่เข้าแอปผ่านเบราว์เซอร์ตรง ยังล็อกอินด้วยอีเมล/รหัสผ่าน
-          หรือ Google ได้เหมือนเดิม
-        </p>
-        <Snippet title="Prompt (ภาษาไทย, พร้อมใช้)" code={AI_PROMPT(hub)} />
-      </section>
-
-      <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
         <h2 className="font-semibold">Firebase custom token</h2>
         <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
           hub ไม่ได้เก็บรายชื่อแอปไว้ในโค้ด แต่มองหา secret ชื่อ{" "}
@@ -310,19 +321,13 @@ function DocsPage() {
           </li>
           <li>ไปที่แอปลูก ก๊อป prompt ข้างล่างไปสั่ง AI ที่ดูแล repo ของแอปนั้น</li>
         </ol>
-        <Snippet
-          title="Prompt สำหรับแอปลูก Social (แก้ asset path + SSO)"
-          code={CHILD_APP_FIX_PROMPT(hub)}
-        />
-      </section>
-
-      <section className="mt-4 rounded-3xl border border-border bg-card/70 p-6">
-        <h2 className="font-semibold">Life OS (Lovable Cloud อีก workspace)</h2>
-        <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
-          Life OS ไม่ใช้ Firebase จึงใช้ผลลัพธ์จาก exchange สร้าง/ผูกบัญชีใน Lovable Cloud ของตัวเอง
-          แล้วออก session ฝั่งเซิร์ฟเวอร์ ก๊อป prompt นี้ไปวางใน workspace ของ Life OS
+        <p className="mt-4 text-sm leading-relaxed text-muted-foreground">
+          prompt นี้ผ่านการใช้งานจริงกับแอปลูกตัวแรกมาแล้ว ก๊อปไปใช้กับแอปที่เหลือได้เลย
+          แก้แค่ค่าคงที่ 3 ตัวข้างบน prompt (<span className="font-mono text-xs">HUB_URL</span>,{" "}
+          <span className="font-mono text-xs">APP_SLUG</span>,{" "}
+          <span className="font-mono text-xs">CALLBACK</span>)
         </p>
-        <Snippet title="Prompt สำหรับ Life OS" code={LIFE_OS_PROMPT(hub)} />
+        <Snippet title="Prompt สำหรับแอปลูก Social (พร้อมใช้)" code={SOCIAL_APP_PROMPT(hub)} />
       </section>
     </main>
   );
