@@ -5,6 +5,7 @@ import { auth } from "@/integrations/firebase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { getLineLauncherConfig, signInWithLine } from "@/lib/line-auth.functions";
 import { ensureLiff } from "@/lib/liff";
+import { useLang, type StringKey } from "@/lib/i18n";
 
 export type LineLoginStatus = "idle" | "working" | "needs-setup" | "outside-line" | "error";
 
@@ -14,7 +15,10 @@ export function useLineLogin() {
   const getConfig = useServerFn(getLineLauncherConfig);
   const lineSignIn = useServerFn(signInWithLine);
   const [status, setStatus] = useState<LineLoginStatus>("idle");
-  const [message, setMessage] = useState<string | null>(null);
+  // Either a translatable key or a verbatim error from the server. Resolved
+  // at render time so the sign-in effect does not depend on the language.
+  const [message, setMessage] = useState<{ key: StringKey } | { text: string } | null>(null);
+  const { t } = useLang();
 
   useEffect(() => {
     if (loading || user) return;
@@ -48,7 +52,7 @@ export function useLineLogin() {
         const idToken = liff.getIDToken();
         if (!idToken) {
           setStatus("error");
-          setMessage("ไม่ได้รับ ID token จาก LINE");
+          setMessage({ key: "line.noIdToken" });
           return;
         }
 
@@ -58,7 +62,7 @@ export function useLineLogin() {
         if (cancelled) return;
         console.error(error);
         setStatus("error");
-        setMessage(error instanceof Error ? error.message : "เข้าสู่ระบบด้วย LINE ไม่สำเร็จ");
+        setMessage(error instanceof Error ? { text: error.message } : { key: "line.failed" });
       }
     })();
 
@@ -67,5 +71,6 @@ export function useLineLogin() {
     };
   }, [loading, user, getConfig, lineSignIn]);
 
-  return { status, message, user, loading };
+  const resolved = message === null ? null : "key" in message ? t(message.key) : message.text;
+  return { status, message: resolved, user, loading };
 }

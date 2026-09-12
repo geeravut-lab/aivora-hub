@@ -22,13 +22,5 @@ export const Route = createFileRoute("/business")({
 
 /** Business apps are opened directly — no SSO ticket; users sign in at each app. */
 function BusinessLauncher() {
-  return (
-    <AppLauncher
-      category="business"
-      sso={false}
-      heading="แอปสำหรับธุรกิจ"
-      subheading="เปิดแล้วเข้าสู่ระบบที่แอปนั้นเอง"
-      settingsPath="/settings"
-    />
-  );
+  return <AppLauncher category="business" sso={false} settingsPath="/settings" />;
 }

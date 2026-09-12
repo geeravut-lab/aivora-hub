@@ -35,7 +35,9 @@ export async function listApps(): Promise<AppRecord[]> {
       id: entry.id,
       slug: data.slug ?? entry.id,
       name: data.name ?? entry.id,
+      nameEn: data.nameEn ?? null,
       description: data.description ?? null,
+      descriptionEn: data.descriptionEn ?? null,
       url: data.url ?? "",
       icon: data.icon ?? "layout-grid",
       accent: data.accent ?? "primary",
@@ -93,10 +95,15 @@ export async function deleteApp(id: string): Promise<void> {
   await deleteDoc(doc(db, COLLECTIONS.apps, id));
 }
 
-export async function saveBrandingText(brandName: string, tagline: string): Promise<void> {
+export async function saveBrandingText(text: {
+  brandName: string;
+  brandNameEn: string | null;
+  tagline: string;
+  taglineEn: string | null;
+}): Promise<void> {
   await setDoc(
     doc(db, COLLECTIONS.branding, BRANDING_DOC_ID),
-    { brandName, tagline, updatedAt: new Date() },
+    { ...text, updatedAt: new Date() },
     { merge: true },
   );
 }
