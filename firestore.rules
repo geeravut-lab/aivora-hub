@@ -48,6 +48,17 @@ service cloud.firestore {
       allow read, write: if false;
     }
 
+    // Admin-side AI translation setup. The public half carries the provider,
+    // the model and a four-character hint of the key; the key itself sits in
+    // /private, which no client may touch — the server functions write both.
+    match /settings/{docId} {
+      allow read: if isAdmin();
+      allow write: if false;
+    }
+    match /private/{docId} {
+      allow read, write: if false;
+    }
+
     // Anything not named above stays closed.
     match /{document=**} {
       allow read, write: if false;

@@ -19,6 +19,8 @@ import { auth } from "@/integrations/firebase/client";
 import { syncMyAccount } from "@/lib/line-auth.functions";
 import { isLineInAppBrowser } from "@/lib/open-external";
 import { useAuth } from "@/hooks/useAuth";
+import { useLang, type StringKey } from "@/lib/i18n";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -53,30 +55,37 @@ function safeNext(next: string | undefined): string {
 }
 
 /** Firebase messages are English error codes; show something a user can act on. */
-function readableAuthError(error: unknown): string {
+function authErrorKey(error: unknown): StringKey | null {
   const code = (error as { code?: string } | null)?.code ?? "";
   switch (code) {
     case "auth/invalid-credential":
     case "auth/wrong-password":
     case "auth/user-not-found":
-      return "อีเมลหรือรหัสผ่านไม่ถูกต้อง";
+      return "auth.err.invalidCredential";
     case "auth/email-already-in-use":
-      return "อีเมลนี้มีบัญชีอยู่แล้ว — กดเข้าสู่ระบบแทน";
+      return "auth.err.emailInUse";
     case "auth/weak-password":
-      return "รหัสผ่านสั้นเกินไป ต้องอย่างน้อย 6 ตัวอักษร";
+      return "auth.err.weakPassword";
     case "auth/too-many-requests":
-      return "ลองผิดหลายครั้งเกินไป รอสักครู่แล้วลองใหม่";
+      return "auth.err.tooMany";
     case "auth/network-request-failed":
-      return "เชื่อมต่อเครือข่ายไม่สำเร็จ";
+      return "auth.err.network";
     default:
-      return error instanceof Error ? error.message : "ดำเนินการไม่สำเร็จ";
+      return null;
   }
 }
 
 function AuthPage() {
   const { next } = Route.useSearch();
   const { user } = useAuth();
+  const { lang, setLang, t } = useLang();
   const syncClaim = useServerFn(syncMyAccount);
+
+  function readableAuthError(error: unknown): string {
+    const key = authErrorKey(error);
+    if (key) return t(key);
+    return error instanceof Error ? error.message : t("auth.err.generic");
+  }
   const [mode, setMode] = useState<"signin" | "signup">("signin");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -126,10 +135,10 @@ function AuthPage() {
     try {
       if (mode === "signup") {
         const credential = await createUserWithEmailAndPassword(auth, email, password);
-        const name = displayName || email.split("@")[0] || "ผู้ใช้";
+        const name = displayName || email.split("@")[0] || t("auth.defaultName");
         await updateProfile(credential.user, { displayName: name });
         void sendEmailVerification(credential.user).catch(() => undefined);
-        toast.success("สร้างบัญชีแล้ว");
+        toast.success(t("auth.accountCreated"));
       } else {
         await signInWithEmailAndPassword(auth, email, password);
       }
@@ -168,7 +177,10 @@ function AuthPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-5 py-12">
+    <main className="relative flex min-h-screen items-center justify-center px-5 py-12">
+      <div className="absolute right-5 top-5">
+        <LanguageToggle lang={lang} onChange={setLang} />
+      </div>
       <div className="w-full max-w-sm">
         <BrandMark className="mb-8" size="lg" />
 
@@ -176,18 +188,18 @@ function AuthPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             {mode === "signup" ? (
               <div className="space-y-2">
-                <Label htmlFor="displayName">ชื่อที่แสดง</Label>
+                <Label htmlFor="displayName">{t("auth.displayName")}</Label>
                 <Input
                   id="displayName"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="ชื่อของคุณ"
+                  placeholder={t("auth.displayNamePlaceholder")}
                   autoComplete="name"
                 />
               </div>
             ) : null}
             <div className="space-y-2">
-              <Label htmlFor="email">อีเมล</Label>
+              <Label htmlFor="email">{t("auth.email")}</Label>
               <Input
                 id="email"
                 type="email"
@@ -198,7 +210,7 @@ function AuthPage() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">รหัสผ่าน</Label>
+              <Label htmlFor="password">{t("auth.password")}</Label>
               <Input
                 id="password"
                 type="password"
@@ -211,13 +223,13 @@ function AuthPage() {
             </div>
             <Button type="submit" className="w-full rounded-full" disabled={busy}>
               {busy ? <Loader2 className="size-4 animate-spin" /> : null}
-              {mode === "signin" ? "เข้าสู่ระบบ" : "สมัครสมาชิก"}
+              {mode === "signin" ? t("auth.signIn") : t("auth.signUp")}
             </Button>
           </form>
 
           <div className="my-5 flex items-center gap-3 text-xs text-muted-foreground">
             <span className="h-px flex-1 bg-border" />
-            หรือ
+            {t("common.or")}
             <span className="h-px flex-1 bg-border" />
           </div>
 
@@ -228,7 +240,7 @@ function AuthPage() {
             onClick={handleGoogle}
             disabled={busy}
           >
-            เข้าสู่ระบบด้วย Google
+            {t("auth.google")}
           </Button>
 
           <button
@@ -236,7 +248,7 @@ function AuthPage() {
             className="mt-5 w-full text-center text-sm text-muted-foreground hover:text-foreground"
             onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
           >
-            {mode === "signin" ? "ยังไม่มีบัญชี? สมัครสมาชิก" : "มีบัญชีอยู่แล้ว? เข้าสู่ระบบ"}
+            {mode === "signin" ? t("auth.toSignUp") : t("auth.toSignIn")}
           </button>
         </div>
       </div>

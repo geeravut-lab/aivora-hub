@@ -1,4 +1,5 @@
 import { useBranding } from "@/hooks/useBranding";
+import { useLang } from "@/lib/i18n";
 import { cn } from "@/lib/utils";
 
 export function BrandMark({
@@ -10,14 +11,15 @@ export function BrandMark({
   size?: "sm" | "md" | "lg";
   showName?: boolean;
 }) {
-  const { branding } = useBranding();
+  const { display: branding } = useBranding();
+  const { t } = useLang();
   const box = size === "lg" ? "size-20" : size === "sm" ? "size-9" : "size-14";
 
   return (
     <div className={cn("flex flex-col items-center gap-2", className)}>
       <img
         src={branding.logoSrc}
-        alt={`โลโก้ ${branding.brand_name}`}
+        alt={t("common.logoAlt", { brand: branding.brand_name })}
         className={cn(box, "object-contain")}
       />
       {showName ? (

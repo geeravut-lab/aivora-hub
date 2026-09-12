@@ -21,13 +21,5 @@ export const Route = createFileRoute("/")({
 });
 
 function SocialLauncher() {
-  return (
-    <AppLauncher
-      category="social"
-      sso
-      heading="แอปของคุณ"
-      subheading="ล็อกอินครั้งเดียว ใช้ได้ทุกแอป"
-      settingsPath="/settings"
-    />
-  );
+  return <AppLauncher category="social" sso settingsPath="/settings" />;
 }

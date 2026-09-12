@@ -9,6 +9,8 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, type ReactNode } from "react";
 import { Toaster } from "@/components/ui/sonner";
+import { LangProvider } from "@/components/LanguageToggle";
+import { useLang } from "@/lib/i18n";
 import { onIdTokenChanged } from "firebase/auth";
 import { auth } from "@/integrations/firebase/client";
 import { resolveLiffStatePathAfterInit } from "@/lib/liff-state";
@@ -16,20 +18,19 @@ import { resolveLiffStatePathAfterInit } from "@/lib/liff-state";
 import appCss from "../styles.css?url";
 
 function NotFoundComponent() {
+  const { t } = useLang();
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-7xl font-bold text-foreground">404</h1>
-        <h2 className="mt-4 text-xl font-semibold text-foreground">ไม่พบหน้านี้</h2>
-        <p className="mt-2 text-sm text-muted-foreground">
-          หน้าที่คุณเปิดอาจถูกย้ายหรือไม่มีอยู่แล้ว
-        </p>
+        <h2 className="mt-4 text-xl font-semibold text-foreground">{t("root.notFound.title")}</h2>
+        <p className="mt-2 text-sm text-muted-foreground">{t("root.notFound.body")}</p>
         <div className="mt-6">
           <Link
             to="/"
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            กลับหน้าแรก
+            {t("common.back")}
           </Link>
         </div>
       </div>
@@ -40,16 +41,15 @@ function NotFoundComponent() {
 function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
   console.error(error);
   const router = useRouter();
+  const { t } = useLang();
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="max-w-md text-center">
         <h1 className="text-xl font-semibold tracking-tight text-foreground">
-          โหลดหน้านี้ไม่สำเร็จ
+          {t("root.error.title")}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          เกิดข้อผิดพลาดบางอย่าง ลองรีเฟรชอีกครั้งหรือกลับหน้าแรก
-        </p>
+        <p className="mt-2 text-sm text-muted-foreground">{t("root.error.body")}</p>
         <div className="mt-6 flex flex-wrap justify-center gap-2">
           <button
             onClick={() => {
@@ -58,13 +58,13 @@ function ErrorComponent({ error, reset }: { error: Error; reset: () => void }) {
             }}
             className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
           >
-            ลองอีกครั้ง
+            {t("common.retry")}
           </button>
           <a
             href="/"
             className="inline-flex items-center justify-center rounded-md border border-input bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-accent"
           >
-            กลับหน้าแรก
+            {t("common.back")}
           </a>
         </div>
       </div>
@@ -150,9 +150,11 @@ function RootComponent() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-      <Outlet />
-      <Toaster />
+      <LangProvider>
+        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+        <Outlet />
+        <Toaster />
+      </LangProvider>
     </QueryClientProvider>
   );
 }

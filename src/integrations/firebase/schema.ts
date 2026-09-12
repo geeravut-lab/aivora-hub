@@ -8,6 +8,8 @@
  * branding/singleton                 brand name, tagline, logo
  * userAppPrefs/{uid}/apps/{appId}    per-user show/hide
  * ssoTickets/{ticketHash}            server-only, one-time, short-lived
+ * settings/aiTranslation             provider + model for admin-side translation
+ * private/aiTranslation              server-only: the provider API key
  */
 export const COLLECTIONS = {
   profiles: "profiles",
@@ -16,7 +18,11 @@ export const COLLECTIONS = {
   branding: "branding",
   userAppPrefs: "userAppPrefs",
   ssoTickets: "ssoTickets",
+  settings: "settings",
+  private: "private",
 } as const;
+
+export const AI_TRANSLATION_DOC_ID = "aiTranslation";
 
 export const BRANDING_DOC_ID = "singleton";
 
@@ -27,8 +33,12 @@ export type AppCategory = "social" | "business";
 
 export interface AppDoc {
   slug: string;
+  /** Thai — the admin's primary language and the fallback for every other one. */
   name: string;
+  /** English; null means "not translated yet", the UI falls back to `name`. */
+  nameEn: string | null;
   description: string | null;
+  descriptionEn: string | null;
   url: string;
   icon: string;
   accent: string;
@@ -47,7 +57,9 @@ export interface ProfileDoc {
 
 export interface BrandingDoc {
   brandName: string;
+  brandNameEn: string | null;
   tagline: string;
+  taglineEn: string | null;
   logoUrl: string | null;
   logoPath: string | null;
 }
@@ -63,6 +75,18 @@ export interface SsoTicketDoc {
   redirectUri: string;
   expiresAt: number;
   usedAt: number | null;
+}
+
+export const AI_PROVIDERS = ["gemini", "openai", "anthropic"] as const;
+export type AiProvider = (typeof AI_PROVIDERS)[number];
+
+/** What the browser may see about the translation setup — never the key. */
+export interface AiTranslationSettingsDoc {
+  provider: AiProvider | null;
+  model: string | null;
+  hasApiKey: boolean;
+  /** Last four characters of the stored key, so an admin can tell keys apart. */
+  apiKeyHint: string | null;
 }
 
 /** Roles live in Firebase custom claims, not in a collection. */

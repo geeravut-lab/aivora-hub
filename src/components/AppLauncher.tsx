@@ -3,26 +3,20 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import {
-  ArrowUpRight,
-  Loader2,
-  LogOut,
-  Settings2,
-  Sparkles,
-  LayoutGrid,
-  Shield,
-  ShieldCheck,
-} from "lucide-react";
+import { ArrowUpRight, Loader2, LogOut, Settings2, Shield, ShieldCheck } from "lucide-react";
 import { signOut } from "firebase/auth";
 import { auth } from "@/integrations/firebase/client";
 import type { AppCategory } from "@/integrations/firebase/schema";
 import { getProfile, listVisibleApps, type AppRecord } from "@/lib/hub-data";
+import { localized, useLang } from "@/lib/i18n";
 import { useBranding } from "@/hooks/useBranding";
 import { useIsAdmin } from "@/hooks/useIsAdmin";
 import { useLineLogin } from "@/hooks/useLineLogin";
 import { issueSsoTicket } from "@/lib/sso.functions";
 import { ensureLiff } from "@/lib/liff";
 import { isLineInAppBrowser, openInDefaultBrowser } from "@/lib/open-external";
+import { AppIcon } from "@/components/AppIcon";
+import { LanguageToggle } from "@/components/LanguageToggle";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -31,24 +25,26 @@ export type { AppCategory };
 export function AppLauncher({
   category,
   sso,
-  heading,
-  subheading,
   settingsPath,
 }: {
   category: AppCategory;
   /** Social apps hand off an SSO ticket; business apps just open and log in themselves. */
   sso: boolean;
-  heading: string;
-  subheading: string;
   settingsPath: "/settings";
 }) {
   const navigate = useNavigate();
+  const { lang, setLang, t } = useLang();
   const { status, message, user, loading } = useLineLogin();
-  const { branding } = useBranding();
+  const { display: branding } = useBranding();
   const { isAdmin } = useIsAdmin(user);
   const issueTicket = useServerFn(issueSsoTicket);
   const [pending, setPending] = useState<string | null>(null);
   const [liffReady, setLiffReady] = useState(() => !isLineInAppBrowser());
+
+  const heading =
+    category === "social" ? t("launcher.social.heading") : t("launcher.business.heading");
+  const subheading =
+    category === "social" ? t("launcher.social.subheading") : t("launcher.business.subheading");
 
   useEffect(() => {
     if (!isLineInAppBrowser()) return;
@@ -77,6 +73,7 @@ export function AppLauncher({
   });
 
   async function handleOpen(app: AppRecord) {
+    const appName = localized(lang, app.name, app.nameEn);
     if (app.url.startsWith("/")) {
       navigate({ to: app.url });
       return;
@@ -84,7 +81,7 @@ export function AppLauncher({
     const prefixes = app.allowedRedirectPrefixes ?? [];
     if (!sso || prefixes.length === 0) {
       await openInDefaultBrowser(app.url);
-      if (sso) toast.info(`${app.name} ยังไม่ได้ตั้งค่า SSO — เปิดแบบปกติแทน`);
+      if (sso) toast.info(t("launcher.noSso", { app: appName }));
       return;
     }
     setPending(app.slug);
@@ -97,17 +94,20 @@ export function AppLauncher({
       await openInDefaultBrowser(redirectTo);
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "เปิดแอปไม่สำเร็จ");
+      toast.error(error instanceof Error ? error.message : t("launcher.openFailed"));
     } finally {
       setPending(null);
     }
   }
 
+  const languageToggle = <LanguageToggle lang={lang} onChange={setLang} />;
+
   if (loading || (!user && status === "working")) {
     return (
       <FullScreenNotice
         icon={<Loader2 className="size-6 animate-spin" />}
-        title="กำลังเข้าสู่ระบบ…"
+        title={t("launcher.signingIn")}
+        toolbar={languageToggle}
       />
     );
   }
@@ -117,19 +117,19 @@ export function AppLauncher({
       <FullScreenNotice
         icon={<ShieldCheck className="size-6 text-primary" />}
         title={
-          status === "needs-setup" ? "ยังไม่ได้ตั้งค่า LINE Login" : "เข้าสู่ระบบเพื่อเริ่มใช้งาน"
+          status === "needs-setup" ? t("launcher.needsSetup.title") : t("launcher.signIn.title")
         }
         description={
           status === "needs-setup"
-            ? "ต้องใส่ LINE Channel ID / Channel Secret และ LIFF ID ก่อน จึงจะล็อกอินผ่าน LINE ได้"
-            : (message ??
-              "เปิดหน้านี้จาก LINE เพื่อล็อกอินอัตโนมัติ หรือเข้าสู่ระบบด้วยอีเมล/Google")
+            ? t("launcher.needsSetup.body")
+            : (message ?? t("launcher.signIn.body"))
         }
         action={
           <Button onClick={() => navigate({ to: "/auth" })} className="rounded-full px-6">
-            เข้าสู่ระบบด้วยอีเมลหรือ Google
+            {t("launcher.signIn.button")}
           </Button>
         }
+        toolbar={languageToggle}
       />
     );
   }
@@ -143,13 +143,13 @@ export function AppLauncher({
           {profile?.avatarUrl ? (
             <img
               src={profile.avatarUrl}
-              alt={profile.displayName ?? "โปรไฟล์ผู้ใช้"}
+              alt={profile.displayName ?? t("launcher.profileAlt")}
               className="size-12 rounded-2xl border border-border object-cover"
             />
           ) : (
             <img
               src={branding.logoSrc}
-              alt={`โลโก้ ${branding.brand_name}`}
+              alt={t("common.logoAlt", { brand: branding.brand_name })}
               className="size-12 rounded-2xl border border-border bg-card object-contain p-1"
             />
           )}
@@ -158,18 +158,22 @@ export function AppLauncher({
               {branding.brand_name}
             </p>
             <h1 className="text-lg font-semibold">
-              สวัสดี{" "}
-              {profile?.displayName ?? user.displayName ?? user.email?.split("@")[0] ?? "คุณ"}
+              {t("launcher.hello")}{" "}
+              {profile?.displayName ??
+                user.displayName ??
+                user.email?.split("@")[0] ??
+                t("launcher.you")}
             </h1>
           </div>
         </div>
         <div className="flex items-center gap-1">
+          {languageToggle}
           {isAdmin ? (
             <Button
               variant="ghost"
               size="icon"
               onClick={() => navigate({ to: "/admin" })}
-              aria-label="จัดการ Launcher"
+              aria-label={t("launcher.manage")}
             >
               <Shield className="size-5" />
             </Button>
@@ -178,17 +182,17 @@ export function AppLauncher({
             variant="ghost"
             size="icon"
             onClick={() => navigate({ to: settingsPath })}
-            aria-label="ตั้งค่า"
+            aria-label={t("launcher.settings")}
           >
             <Settings2 className="size-5" />
           </Button>
           <Button
             variant="ghost"
             size="icon"
-            aria-label="ออกจากระบบ"
+            aria-label={t("common.signOut")}
             onClick={async () => {
               await signOut(auth);
-              toast.success("ออกจากระบบแล้ว");
+              toast.success(t("common.signedOut"));
             }}
           >
             <LogOut className="size-5" />
@@ -212,9 +216,11 @@ export function AppLauncher({
           // Say what actually broke. Silently falling back to "no apps here"
           // makes a rules or config failure look like an empty launcher.
           <div className="mt-5 rounded-3xl border border-destructive/40 bg-destructive/5 p-6">
-            <p className="text-sm font-medium">โหลดรายการแอปไม่สำเร็จ</p>
+            <p className="text-sm font-medium">{t("launcher.loadFailed")}</p>
             <p className="mt-2 break-words text-xs text-muted-foreground">
-              {appsQuery.error instanceof Error ? appsQuery.error.message : "ไม่ทราบสาเหตุ"}
+              {appsQuery.error instanceof Error
+                ? appsQuery.error.message
+                : t("common.unknownError")}
             </p>
             <Button
               variant="outline"
@@ -222,12 +228,12 @@ export function AppLauncher({
               className="mt-4 rounded-full"
               onClick={() => void appsQuery.refetch()}
             >
-              ลองอีกครั้ง
+              {t("common.retry")}
             </Button>
           </div>
         ) : (appsQuery.data ?? []).length === 0 ? (
           <p className="mt-5 rounded-3xl border border-border bg-card/70 p-6 text-sm text-muted-foreground">
-            ยังไม่มีแอปในกลุ่มนี้ — ผู้ดูแลระบบสามารถเพิ่มได้ในหน้าจัดการ Launcher
+            {t("launcher.empty")}
           </p>
         ) : (
           <div className="mt-5 grid gap-3 sm:grid-cols-2">
@@ -240,11 +246,7 @@ export function AppLauncher({
               >
                 <div className="flex w-full items-start justify-between">
                   <span className="flex size-11 items-center justify-center rounded-2xl bg-primary/15 text-primary">
-                    {app.icon === "sparkles" ? (
-                      <Sparkles className="size-5" />
-                    ) : (
-                      <LayoutGrid className="size-5" />
-                    )}
+                    <AppIcon name={app.icon} className="size-5" />
                   </span>
                   {!liffReady || pending === app.slug ? (
                     <Loader2 className="size-4 animate-spin text-muted-foreground" />
@@ -252,9 +254,9 @@ export function AppLauncher({
                     <ArrowUpRight className="size-4 text-muted-foreground transition-transform group-hover:-translate-y-0.5 group-hover:translate-x-0.5" />
                   )}
                 </div>
-                <span className="font-semibold">{app.name}</span>
+                <span className="font-semibold">{localized(lang, app.name, app.nameEn)}</span>
                 <span className="line-clamp-2 text-sm text-muted-foreground">
-                  {app.description}
+                  {localized(lang, app.description ?? "", app.descriptionEn)}
                 </span>
               </button>
             ))}
@@ -267,7 +269,7 @@ export function AppLauncher({
             className="rounded-full px-6"
             onClick={() => navigate({ to: category === "social" ? "/business" : "/" })}
           >
-            {category === "social" ? "ไปที่แอปสำหรับธุรกิจ" : "ไปที่แอปของคุณ (Social)"}
+            {category === "social" ? t("launcher.toBusiness") : t("launcher.toSocial")}
             <ArrowUpRight className="ml-1 size-4" />
           </Button>
         </div>
@@ -281,14 +283,17 @@ function FullScreenNotice({
   title,
   description,
   action,
+  toolbar,
 }: {
   icon: React.ReactNode;
   title: string;
   description?: string;
   action?: React.ReactNode;
+  toolbar?: React.ReactNode;
 }) {
   return (
-    <main className="flex min-h-screen items-center justify-center px-6">
+    <main className="relative flex min-h-screen items-center justify-center px-6">
+      {toolbar ? <div className="absolute right-5 top-5">{toolbar}</div> : null}
       <div className="w-full max-w-sm rounded-3xl border border-border bg-card/70 p-8 text-center">
         <div className="mx-auto flex size-12 items-center justify-center rounded-2xl bg-primary/15">
           {icon}

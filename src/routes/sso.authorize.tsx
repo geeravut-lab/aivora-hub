@@ -4,6 +4,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { Loader2, ShieldCheck } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
+import { useLang } from "@/lib/i18n";
 import { issueSsoTicket } from "@/lib/sso.functions";
 
 const searchSchema = z.object({
@@ -33,6 +34,7 @@ function SsoAuthorize() {
   const search = Route.useSearch();
   const navigate = useNavigate();
   const { user, loading } = useAuth();
+  const { t } = useLang();
   const issue = useServerFn(issueSsoTicket);
   const [error, setError] = useState<string | null>(null);
 
@@ -52,14 +54,14 @@ function SsoAuthorize() {
         });
         if (!cancelled) window.location.replace(redirectTo);
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : "ส่งต่อการเข้าสู่ระบบไม่สำเร็จ");
+        if (!cancelled) setError(e instanceof Error ? e.message : t("sso.forwardFailed"));
       }
     })();
 
     return () => {
       cancelled = true;
     };
-  }, [loading, user, search.app, search.return, issue, navigate]);
+  }, [loading, user, search.app, search.return, issue, navigate, t]);
 
   return (
     <main className="flex min-h-screen items-center justify-center px-6">
@@ -72,7 +74,7 @@ function SsoAuthorize() {
           )}
         </div>
         <h1 className="mt-5 text-lg font-semibold">
-          {error ? "ส่งต่อไม่สำเร็จ" : "กำลังส่งต่อไปยังแอป…"}
+          {error ? t("sso.failedTitle") : t("sso.forwarding")}
         </h1>
         <p className="mt-2 text-sm text-muted-foreground">{error ?? search.app}</p>
       </div>
